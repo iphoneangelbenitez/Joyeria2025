@@ -1,0 +1,194 @@
+/* ===== Clientes - Estilo Joyería ===== */
+:root{
+  --oro:#d4af37;
+  --oro-suave:#f1e5b9;
+  --plata:#cfd6df;
+  --grafito:#0f1115;
+  --antracita:#171a20;
+  --tinta:#22262f;
+  --borde:12px;
+  --sombra:0 12px 32px rgba(0,0,0,.35);
+  --sombra-suave:0 6px 18px rgba(0,0,0,.2);
+}
+
+html,body{
+  background: radial-gradient(1200px 800px at 20% -10%, #1d212b 0%, #12151b 40%, var(--grafito) 100%) fixed;
+  color:#e9edf2;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+.clientes-container{
+  padding:22px;
+  min-height: calc(100vh - 76px);
+}
+
+/* Header */
+.clientes-header{
+  background:
+    linear-gradient(150deg, rgba(255,215,106,.10), rgba(212,175,55,.04)),
+    linear-gradient(135deg, var(--tinta), var(--antracita));
+  color:#fff;
+  padding:22px;
+  border-radius: var(--borde);
+  box-shadow: var(--sombra);
+  border:1px solid rgba(255,255,255,.06);
+}
+.clientes-header h2{ font-weight:800; letter-spacing:.3px; }
+.clientes-header i{ color:var(--oro); filter: drop-shadow(0 4px 10px rgba(212,175,55,.25)); }
+
+/* Cards */
+.clientes-card{
+  background: linear-gradient(180deg, #181b22 0%, #14181f 100%);
+  border-radius: var(--borde);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow: var(--sombra-suave);
+  margin-bottom:20px;
+  overflow:hidden;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.clientes-card:hover{
+  transform: translateY(-3px);
+  box-shadow: var(--sombra);
+  border-color: rgba(212,175,55,.35);
+}
+.clientes-card-header{
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03));
+  padding:14px 20px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.clientes-card-header h5{ color:#f3f6fb; margin:0; }
+
+/* Filtros */
+.filtros-container{
+  background: linear-gradient(180deg, #171b23, #141920);
+  padding: 18px;
+  border-radius: var(--borde);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow: var(--sombra-suave);
+}
+.form-label{ color:#dfe6ef; font-weight:600; }
+.form-select, .form-control{
+  background:#0f1319; color:#e7ecf3; border:1px solid rgba(255,255,255,.10);
+  border-radius:10px;
+}
+.form-select:focus, .form-control:focus{
+  border-color: var(--oro); box-shadow: 0 0 0 .2rem rgba(212,175,55,.15);
+  background:#10151c; color:#fff;
+}
+
+/* Items */
+.cliente-item{
+  border-left:4px solid var(--oro);
+  margin-bottom:15px;
+  padding:14px;
+  border-radius:8px;
+  background: linear-gradient(180deg, #1a1f27, #151a21);
+  border:1px solid rgba(255,255,255,.06);
+  transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.cliente-item:hover{
+  background: linear-gradient(180deg, rgba(212,175,55,.08), #151a21);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0,0,0,.25);
+}
+.cliente-item h6{ color:#f8fafc; font-weight:700; }
+.cliente-item p{ color:#aab3bf; }
+
+/* Servicios embebidos */
+.servicio-item{
+  border-left:4px solid transparent;
+  margin-bottom:10px;
+  padding:10px;
+  border-radius:8px;
+  background: linear-gradient(180deg, #1a1f27, #151a21);
+  border:1px solid rgba(255,255,255,.06);
+}
+.servicio-mantenimiento{ border-left-color:#17a2b8; }
+.servicio-reparacion{ border-left-color:#fd7e14; }
+
+/* Estados */
+.estado-badge{
+  font-size:.8rem;
+  padding:6px 12px;
+  border-radius:999px;
+  font-weight:700;
+  border:1px solid transparent;
+}
+.estado-pendiente{
+  background: rgba(246, 193, 67, .12);
+  color:#f6c343;
+  border-color: rgba(246, 193, 67, .35);
+}
+.estado-proceso{
+  background: rgba(142, 201, 255, .12);
+  color:#8ec9ff;
+  border-color: rgba(142, 201, 255, .35);
+}
+.estado-completado{
+  background: rgba(72, 187, 120, .12);
+  color:#48bb78;
+  border-color: rgba(72, 187, 120, .35);
+}
+
+/* Badges y alerts */
+.badge.bg-primary{
+  background: linear-gradient(180deg, rgba(142,201,255,.25), rgba(142,201,255,.18)) !important;
+  color:#dfefff !important;
+  border:1px solid rgba(142,201,255,.35);
+  font-weight:700;
+}
+.alert{
+  border-radius:12px; border:1px solid rgba(255,255,255,.12);
+}
+.alert-danger{ background: rgba(226,85,85,.12); color:#ffdada; border-color: rgba(226,85,85,.35); }
+.alert-success{ background: rgba(72,187,120,.12); color:#def7ea; border-color: rgba(72,187,120,.35); }
+.alert-info{ background: rgba(142,201,255,.12); color:#e7f3ff; border-color: rgba(142,201,255,.35); }
+
+/* Botones */
+.btn{ border-radius:999px; font-weight:700; letter-spacing:.2px; }
+.btn-primary{ background: var(--oro); border-color: var(--oro); color:#1a1a1a; }
+.btn-primary:hover{ filter: brightness(1.05); }
+.btn-secondary{ background:#2a2f38; border-color:#2a2f38; }
+.btn-secondary:hover{ filter: brightness(1.1); }
+.btn-info{ background:#2b88d8; border-color:#2b88d8; }
+.btn-success{
+  background: linear-gradient(180deg, #45b97a, #3aa16a); border-color:#3aa16a;
+}
+.btn-danger{ background:#e25555; border-color:#e25555; }
+
+/* Navbar */
+.navbar{
+  background: linear-gradient(180deg, #0f1115, #0c0e12) !important;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.navbar .nav-link, .navbar-brand{ color:#e9e9e9 !important; }
+.navbar .nav-link:hover{ color: var(--oro) !important; }
+
+/* Efecto destello */
+@keyframes destello-oro{
+  0%{ box-shadow: 0 0 0 rgba(212,175,55,0); }
+  50%{ box-shadow: 0 0 24px rgba(212,175,55,.25); }
+  100%{ box-shadow: 0 0 0 rgba(212,175,55,0); }
+}
+.clientes-card:hover,
+.btn-primary:hover,
+.btn-success:hover{
+  animation: destello-oro 1.2s ease;
+}
+
+/* Utilidades */
+.text-muted{ color:#a5afbd !important; }
+small, .form-text{ color:#aab3bf; }
+
+/* Responsivo */
+@media (max-width: 991.98px){
+  .clientes-header{ padding:18px; }
+  .clientes-card{ margin-bottom:18px; }
+}
+
+/* Accesibilidad */
+:focus-visible{
+  outline:2px dashed var(--oro);
+  outline-offset:2px;
+}

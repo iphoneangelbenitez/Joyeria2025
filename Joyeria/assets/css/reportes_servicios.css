@@ -1,0 +1,261 @@
+/* =========================================
+   Reportes de Servicios – Estilo Joyería
+   Archivo: assets/css/reportes_servicios.css
+   ========================================= */
+
+:root{
+  --oro:#D4AF37;
+  --oro-2:#E6C45A;
+  --negro:#0B0B0B;
+  --grafito:#1A1A1A;
+  --humo:#2A2A2A;
+  --gris:#8A8A8A;
+  --marfil:#F8F6F2;
+  --borde:rgba(212,175,55,.25);
+  --ok:#28a745; --info:#0dcaf0; --warn:#ffc107; --error:#dc3545;
+}
+
+html,body{
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(212,175,55,.06), transparent 60%),
+    radial-gradient(1000px 700px at 120% 20%, rgba(230,196,90,.05), transparent 60%),
+    linear-gradient(180deg, #0f0f0f 0%, #0a0a0a 100%);
+  color:#e9e9e9;
+  min-height:100%;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Focus dorado */
+:where(input,select,button,.form-control,.form-select):focus{
+  outline: none !important;
+  box-shadow: 0 0 0 .2rem rgba(212,175,55,.25) !important;
+  border-color: var(--oro) !important;
+}
+
+/* Navbar (si la usás) */
+.navbar{
+  background: linear-gradient(180deg, var(--grafito), var(--negro)) !important;
+  border-bottom: 1px solid var(--borde);
+}
+.navbar .nav-link, .navbar .navbar-brand{ color:#f3f3f3 !important; }
+.navbar .nav-link:hover{ color:var(--oro) !important; }
+
+/* Contenedor y cabecera */
+.reportes-container{ padding:24px 0 60px; min-height: calc(100vh - 76px); }
+.reportes-header{
+  background:
+    linear-gradient(135deg, rgba(212,175,55,.12), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,0));
+  border: 1px solid var(--borde);
+  border-radius: 18px;
+  padding: 20px 22px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+  margin-bottom: 25px;
+}
+.reportes-header h2{
+  font-family: "Trajan Pro", "Times New Roman", serif;
+  letter-spacing: .5px;
+  font-weight: 600;
+  color: var(--oro);
+  margin-bottom: 4px;
+}
+.reportes-header p{ color:#cfcfcf; }
+
+/* Filtros */
+.filtros-container{
+  border:1px solid var(--borde);
+  border-radius:18px;
+  padding:18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.15));
+  backdrop-filter: blur(2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.25);
+  margin-bottom: 20px;
+}
+.filtros-container h5{
+  color:var(--oro);
+  font-family: "Trajan Pro", "Times New Roman", serif;
+  margin-bottom:12px;
+}
+.form-label{ color:#dcdcdc; }
+.form-control, .form-select{
+  background:#111 !important;
+  color:#eee !important;
+  border:1px solid #2e2e2e !important;
+  border-radius:12px;
+}
+.form-check-label{ color:#dcdcdc; }
+
+/* Botones */
+.btn{
+  border-radius:14px;
+  border:1px solid transparent;
+  transition: all .2s ease;
+}
+.btn-primary{
+  background: linear-gradient(180deg, var(--oro), #8B6F3D);
+  color:#111; border-color: var(--oro);
+}
+.btn-primary:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+.btn-secondary{ background:#1c1c1c; border-color:#333; color:#ddd; }
+.btn-secondary:hover{ color:#fff; border-color:#444; }
+.btn-success{
+  background: linear-gradient(180deg, #34d399, #15803d);
+  border-color:#22c55e;
+}
+.btn-outline-primary{
+  color: var(--oro);
+  border-color: var(--oro);
+}
+.btn-outline-primary:hover{
+  background: var(--oro); color:#111; border-color: var(--oro);
+}
+
+/* Cards */
+.reportes-card, .estadistica-card{
+  background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.25));
+  border:1px solid var(--borde);
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow: 0 12px 28px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+  margin-bottom: 20px;
+}
+.reportes-card-header{
+  padding:14px 16px;
+  border-bottom:1px solid var(--borde);
+  background: linear-gradient(180deg, rgba(212,175,55,.08), rgba(0,0,0,0));
+}
+.reportes-card h5{ color: var(--oro); font-weight:600; }
+.card-body{ padding:16px; }
+
+/* Estadísticas */
+.estadistica-card{ padding:16px; text-align:center; }
+.estadistica-titulo{ color:#cfcfcf; font-size:.95rem; letter-spacing:.3px; text-transform: none; }
+.estadistica-valor{
+  color:var(--oro-2); font-size:1.8rem; font-weight:700; margin:.1rem 0 .25rem;
+  text-shadow: 0 0 8px rgba(212,175,55,.15);
+}
+.estadistica-descripcion{ color:#b3b3b3; font-size:.875rem; }
+
+/* Tablas */
+.table{
+  color:#e8e8e8;
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(255,255,255,.04);
+  --bs-table-striped-bg: rgba(255,255,255,.02);
+  border-color:#2a2a2a;
+  font-size: .92rem;
+}
+.table thead th{
+  color:var(--oro);
+  font-weight:600;
+  border-bottom:1px solid var(--borde) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.15));
+}
+.table-hover tbody tr:hover{ background: rgba(212,175,55,.06); }
+.table td, .table th{
+  vertical-align: middle;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+.table-responsive{
+  border-radius:14px;
+  border:1px solid var(--borde);
+  overflow:hidden;
+}
+
+/* Estados y tipos (badges) */
+.badge-estado, .badge-tipo{
+  font-size: .8rem;
+  padding: .45rem .7rem;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing:.2px;
+  border:1px solid transparent;
+}
+
+/* Estados */
+.badge-pendiente{
+  background: rgba(255,193,7,.18); color:#ffe08a; border-color: rgba(255,193,7,.35);
+}
+.badge-proceso{
+  background: rgba(13,110,253,.18); color:#a8c9ff; border-color: rgba(13,110,253,.35);
+}
+.badge-completado{
+  background: rgba(40,167,69,.18); color:#9be7b0; border-color: rgba(40,167,69,.35);
+}
+
+/* Tipos */
+.badge-mantenimiento{
+  background: rgba(23,162,184,.18); color:#a8ecfb; border-color: rgba(23,162,184,.35);
+}
+.badge-reparacion{
+  background: rgba(253,126,20,.18); color:#ffd0a5; border-color: rgba(253,126,20,.35);
+}
+
+/* Filas destacadas */
+.servicio-atrasado{
+  background: linear-gradient(90deg, rgba(220,53,69,.10), transparent 60%) !important;
+  border-left: 4px solid #dc3545 !important;
+}
+
+/* Tarjetas tipo "item" (si las usás) */
+.servicio-item{
+  border-left: 4px solid;
+  margin-bottom: 15px;
+  padding: 15px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.15));
+}
+.servicio-mantenimiento{ border-left-color:#17a2b8; }
+.servicio-reparacion{ border-left-color:#fd7e14; }
+
+/* Tabs */
+.nav-tabs{
+  border-bottom:1px solid var(--borde);
+}
+.nav-tabs .nav-link{
+  color:#cfcfcf;
+  border:1px solid transparent;
+  margin-right:6px;
+  border-top-left-radius:12px;
+  border-top-right-radius:12px;
+  background: rgba(255,255,255,.02);
+}
+.nav-tabs .nav-link:hover{
+  color:var(--oro);
+  border-color: var(--borde);
+}
+.nav-tabs .nav-link.active{
+  color: var(--oro);
+  background: linear-gradient(180deg, rgba(212,175,55,.10), rgba(0,0,0,0));
+  border-color: var(--borde);
+  border-bottom-color: var(--borde) !important;
+}
+
+/* Gráficos */
+.chart-container{ position:relative; height:300px; margin-bottom:20px; }
+@media (max-width: 768px){ .chart-container{ height:260px; } }
+
+/* Alertas */
+.alert{
+  border-radius:14px;
+  border:1px solid var(--borde);
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.25));
+  color:#f2f2f2;
+}
+.alert-info{ border-color: rgba(13,202,240,.35); }
+.alert-danger{ border-color: rgba(220,53,69,.45); }
+
+/* Accesibilidad */
+a, button{ transition: color .15s ease, background .15s ease, transform .15s ease; }
+a:focus-visible, button:focus-visible{
+  outline: 2px dashed var(--oro);
+  outline-offset: 2px;
+}
+
+/* Print */
+@media print{
+  body{ background:#fff; color:#000; }
+  .navbar, .filtros-container, .nav-tabs{ display:none !important; }
+  .reportes-card, .estadistica-card{ box-shadow:none; border:1px solid #bbb; }
+  .badge-estado, .badge-tipo{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

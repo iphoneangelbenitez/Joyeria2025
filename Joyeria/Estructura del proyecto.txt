@@ -1,0 +1,33 @@
+joyeria/
+├── index.php
+├── login.php
+├── logout.php
+├── config/
+│   └── database.php
+├── controllers/
+│   ├── AuthController.php
+│   ├── VentaController.php
+│   ├── InventarioController.php
+│   ├── ServicioController.php
+│   ├── ProveedorController.php
+│   └── ClienteController.php
+├── models/
+│   ├── Usuario.php
+│   ├── Venta.php
+│   ├── Producto.php
+│   ├── Servicio.php
+│   ├── Proveedor.php
+│   └── Cliente.php
+├── views/
+│   ├── dashboard.php
+│   ├── ventas/
+│   ├── inventario/
+│   ├── servicios/
+│   ├── proveedores/
+│   └── clientes/
+├── assets/
+│   ├── css/
+│   ├── js/
+│   └── img/
+└── vendors/
+    └── mpdf/ (para generación de PDF)

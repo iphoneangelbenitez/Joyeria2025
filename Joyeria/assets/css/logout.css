@@ -1,0 +1,133 @@
+/* ===== Logout - Estilo Joyería ===== */
+:root{
+  --oro:#d4af37;
+  --oro-soft:#f1e5b9;
+  --grafito:#0f1115;
+  --antracita:#171a20;
+  --tinta:#1a1f28;
+  --sombra:0 14px 40px rgba(0,0,0,.35);
+  --sombra-suave:0 8px 24px rgba(0,0,0,.22);
+  --borde:16px;
+}
+
+/* Fondo */
+html,body{
+  height:100%;
+}
+body{
+  background:
+    radial-gradient(1200px 800px at 20% -10%, #202631 0%, #141922 40%, var(--grafito) 100%) fixed;
+  display:flex; align-items:center; justify-content:center;
+  color:#e9edf2;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  padding:16px;
+}
+
+/* Tarjeta */
+.card{
+  width:min(420px, 92vw);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:var(--borde);
+  box-shadow:var(--sombra);
+  backdrop-filter: blur(6px);
+  overflow:hidden;
+}
+
+/* Cuerpo */
+.card-body{
+  padding:28px 26px;
+}
+
+/* Marca / Logo */
+.logo{
+  color:#dfe6ef;
+  margin-bottom:18px;
+}
+.logo i{
+  font-size:3rem;
+  color:var(--oro);
+  filter: drop-shadow(0 6px 16px rgba(212,175,55,.35));
+  animation: brillo 2.6s ease-in-out infinite;
+}
+.logo h3{
+  margin-top:8px; margin-bottom:0;
+  font-weight:800; letter-spacing:.4px;
+}
+
+/* Animación sutil del ícono */
+@keyframes brillo{
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+/* Alertas */
+.alert{
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:var(--sombra-suave);
+}
+.alert-info{
+  background: linear-gradient(180deg, rgba(142,201,255,.14), rgba(142,201,255,.08));
+  color:#e7f3ff;
+  border-color: rgba(142,201,255,.28);
+}
+.alert-info h4{
+  font-weight:800;
+}
+
+/* Botón principal */
+.btn{
+  border-radius:999px;
+  font-weight:700;
+  letter-spacing:.2px;
+  padding:.75rem 1rem;
+}
+.btn-primary{
+  background: var(--oro);
+  border-color: var(--oro);
+  color:#1a1a1a;
+  box-shadow: 0 8px 22px rgba(212,175,55,.28);
+}
+.btn-primary:hover{
+  filter: brightness(1.06);
+  box-shadow: 0 10px 28px rgba(212,175,55,.34);
+}
+
+/* Cuenta regresiva */
+.countdown{
+  font-size:.95rem;
+  color:#cbd5e1;
+  margin-top:18px;
+  position:relative;
+  padding-top:8px;
+}
+
+/* Barra de progreso (animación de 5s, a juego con tu JS) */
+.countdown::after{
+  content:"";
+  display:block;
+  height:4px;
+  width:100%;
+  background: linear-gradient(90deg, var(--oro), var(--oro-soft));
+  border-radius:999px;
+  margin-top:8px;
+  animation: prog 5s linear forwards;
+  box-shadow: 0 0 14px rgba(212,175,55,.35);
+}
+@keyframes prog{
+  from { transform: scaleX(1); transform-origin:left; }
+  to   { transform: scaleX(0); transform-origin:left; }
+}
+
+/* Tarjeta en hover (sutil) */
+.card:hover{
+  border-color: rgba(212,175,55,.28);
+}
+
+/* Modo responsive suave */
+@media (max-width: 420px){
+  .card-body{ padding:24px 20px; }
+  .logo i{ font-size:2.6rem; }
+}

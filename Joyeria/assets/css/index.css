@@ -1,0 +1,237 @@
+/* ======== Estilo Joyería ======== */
+:root{
+  --oro:#d4af37;
+  --oro-suave:#f1e5b9;
+  --oro-brillo:#ffd76a;
+  --plata:#bfc7d1;
+  --grafito:#0f1115;
+  --antracita:#171a20;
+  --tinta:#22262f;
+  --borde:12px;
+  --sombra:0 10px 30px rgba(0,0,0,.35);
+  --sombra-suave:0 6px 18px rgba(0,0,0,.2);
+}
+
+/* Reset suave sobre Bootstrap */
+html,body{
+  background: radial-gradient(1200px 800px at 20% -10%, #1d212b 0%, #12151b 40%, var(--grafito) 100%) fixed;
+  color:#e6e6e6;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* Borde dorado sutil reutilizable */
+.borde-oro{
+  position: relative;
+}
+.borde-oro::before{
+  content:"";
+  position:absolute; inset:0;
+  border-radius:calc(var(--borde) + 2px);
+  padding:1px;
+  background:linear-gradient(135deg, rgba(212,175,55,.35), rgba(255,215,106,.15));
+  -webkit-mask: 
+    linear-gradient(#000 0 0) content-box, 
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events:none;
+}
+
+/* Header principal */
+.dashboard-header{
+  background:
+    linear-gradient(150deg, rgba(255,215,106,.08), rgba(212,175,55,.03)) ,
+    linear-gradient(135deg, var(--tinta), var(--antracita));
+  border-radius: var(--borde);
+  padding: 24px;
+  box-shadow: var(--sombra);
+}
+.dashboard-header h2{
+  font-weight:700; letter-spacing:.3px;
+  display:flex; align-items:center; gap:.6rem;
+}
+.dashboard-header i{ color:var(--oro); }
+
+/* Tarjetas de estadísticas */
+.stat-card{
+  background: linear-gradient(180deg, #171a20 0%, #14171d 100%);
+  border-radius: var(--borde);
+  box-shadow: var(--sombra-suave);
+  padding: 22px;
+  border: 1px solid rgba(255,255,255,.06);
+  position:relative;
+  overflow:hidden;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.stat-card:hover{
+  transform: translateY(-4px);
+  box-shadow: var(--sombra);
+  border-color: rgba(212,175,55,.35);
+}
+.stat-card .stat-card-icon{
+  font-size: 2.2rem;
+  color: var(--oro);
+  margin-bottom: 14px;
+  filter: drop-shadow(0 3px 8px rgba(212,175,55,.25));
+}
+.stat-card .stat-card-value{
+  font-size: 2.3rem;
+  font-weight: 700;
+  color:#f3f3f3;
+  margin-bottom: 8px;
+}
+.stat-card .stat-card-title{
+  color:#aab1bd;
+  font-size:.95rem;
+  margin-bottom: 14px;
+}
+
+/* Botones outline personalizados */
+.btn-outline-primary,
+.btn-outline-warning,
+.btn-outline-info{
+  border-radius: 999px;
+  border-width: 1px;
+  padding: 6px 14px;
+  font-weight:600;
+  letter-spacing:.2px;
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .15s ease;
+}
+.btn-outline-primary{
+  border-color: var(--oro);
+  color: var(--oro);
+}
+.btn-outline-primary:hover{
+  background: var(--oro);
+  color:#1a1a1a;
+  transform: translateY(-1px);
+}
+.btn-outline-warning{ border-color:#f6c453; color:#f6c453; }
+.btn-outline-warning:hover{ background:#f6c453; color:#1a1a1a; transform: translateY(-1px);}
+.btn-outline-info{ border-color:#8ec9ff; color:#8ec9ff; }
+.btn-outline-info:hover{ background:#8ec9ff; color:#0d1117; transform: translateY(-1px); }
+
+/* Acciones rápidas */
+.quick-actions{
+  background: linear-gradient(180deg, #151821, #11141a);
+  border-radius: var(--borde);
+  box-shadow: var(--sombra-suave);
+  border:1px solid rgba(255,255,255,.06);
+  padding:22px;
+}
+.quick-actions h4{ color:#eaeaea; }
+.action-btn{
+  background: linear-gradient(180deg, #171a20, #14171d);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius: calc(var(--borde) - 2px);
+  color:#dfe6ef;
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.action-btn i{
+  color: var(--oro);
+  filter: drop-shadow(0 3px 8px rgba(212,175,55,.25));
+}
+.action-btn:hover{
+  border-color: rgba(212,175,55,.35);
+  transform: translateY(-3px);
+  box-shadow: var(--sombra);
+  color:#fff;
+}
+
+/* Tarjetas de listados recientes */
+.recent-card{
+  background: linear-gradient(180deg, #171a20, #12151b);
+  border-radius: var(--borde);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow: var(--sombra-suave);
+  padding: 20px;
+}
+.recent-card-header{
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  padding-bottom:10px; margin-bottom:14px;
+}
+.recent-card-header h5{ color:#f0f0f0; }
+.recent-item{
+  padding: 12px 0;
+  border-bottom: 1px dashed rgba(255,255,255,.07);
+}
+.recent-item:last-child{ border-bottom: none; }
+.recent-item h6{
+  color:#f5f5f5; font-weight:700; letter-spacing:.2px;
+}
+.recent-item small{ color:#aab1bd; }
+.recent-item strong{ color: var(--oro-suave); }
+
+/* Badges de estado (servicios) */
+.badge-estado{
+  font-weight:700;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size:.8rem;
+  border:1px solid transparent;
+  text-transform: none;
+}
+.badge-pendiente{
+  background: rgba(246, 193, 67, .12);
+  color:#f6c343;
+  border-color: rgba(246, 193, 67, .35);
+}
+.badge-proceso{
+  background: rgba(142, 201, 255, .12);
+  color:#8ec9ff;
+  border-color: rgba(142, 201, 255, .35);
+}
+.badge-completado{
+  background: rgba(72, 187, 120, .12);
+  color:#48bb78;
+  border-color: rgba(72, 187, 120, .35);
+}
+
+/* Navegación superior incluida */
+.navbar{
+  background: linear-gradient(180deg, #0f1115, #0c0e12) !important;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.navbar .nav-link, .navbar-brand{
+  color:#e9e9e9 !important;
+}
+.navbar .nav-link:hover{ color: var(--oro) !important; }
+
+/* Sutil brillo dorado al pasar por encima de elementos clave */
+@keyframes destello-oro {
+  0% { box-shadow: 0 0 0 rgba(212,175,55,0); }
+  50%{ box-shadow: 0 0 24px rgba(212,175,55,.25); }
+  100%{ box-shadow: 0 0 0 rgba(212,175,55,0); }
+}
+.stat-card:hover,
+.action-btn:hover{
+  animation: destello-oro 1.5s ease;
+}
+
+/* Tipografía & detalles */
+h2,h4,h5,h6{ letter-spacing:.3px; }
+.text-muted{ color:#a3aab6 !important; }
+a{ text-decoration:none; }
+
+/* Utilidad: aplicar borde fino dorado a bloques principales */
+.dashboard-header,
+.stat-card,
+.quick-actions,
+.recent-card { /* opcional: coloca .borde-oro extra si quieres doble borde */
+}
+
+/* Responsivo */
+@media (max-width: 991.98px){
+  .stat-card .stat-card-value{ font-size: 1.9rem; }
+}
+@media (max-width: 575.98px){
+  .dashboard-header{ padding: 18px; }
+  .stat-card{ padding: 18px; }
+  .quick-actions{ padding: 18px; }
+}
+
+/* Focus visible accesible */
+:focus-visible{
+  outline:2px dashed var(--oro);
+  outline-offset: 2px;
+}
