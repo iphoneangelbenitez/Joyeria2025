@@ -110,7 +110,8 @@ $user_type = isset($_SESSION['user_type']) ? (string)$_SESSION['user_type'] : 'U
                     </ul>
                 </li>
                 <?php endif; ?>
-            </ul>
+
+             
             
             <ul class="navbar-nav ms-auto">
                 <!-- Notificación para stock bajo (solo administradores) -->
@@ -148,6 +149,20 @@ $user_type = isset($_SESSION['user_type']) ? (string)$_SESSION['user_type'] : 'U
                 </li>
                 <?php endif; ?>
                 
+            <!-- * probando navbar -->
+         <li class="nav-item me-2 d-flex align-items-center"> <button id="theme-toggle-btn" class="theme-switch" type="button" role="switch" aria-label="Cambiar tema">
+        
+        <span class="slider">
+            <i class="bi bi-sun-fill icon-sun"></i>
+            <i class="bi bi-moon-fill icon-moon"></i>
+        </span>
+    </button>
+    
+</li>
+
+
+
+
                 <li class="nav-item">
                     <span class="navbar-text text-light me-3">
                         <i class="bi bi-person-circle me-1"></i>

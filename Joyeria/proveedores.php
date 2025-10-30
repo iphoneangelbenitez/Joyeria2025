@@ -161,7 +161,26 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
     <title>Proveedores - Sistema de Joyería</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
-    <link rel="stylesheet" href="assets/css/proveedores.css" />
+    <link rel="stylesheet" href="assets/css/theme-oscuro.css" />
+
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                // Aplica la clase al <html>
+                document.documentElement.classList.add('theme-light');
+            }
+        })();
+    </script>
+
+    <style>
+        #theme-toggle-btn .icon-moon { display: none; }
+        #theme-toggle-btn .icon-sun { display: inline-block; }
+        html.theme-light #theme-toggle-btn .icon-moon { display: inline-block; }
+        html.theme-light #theme-toggle-btn .icon-sun { display: none; }
+    </style>
+    
+
 </head>
 <body>
 <?php include 'includes/navbar.php'; ?>
@@ -391,5 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+<script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>

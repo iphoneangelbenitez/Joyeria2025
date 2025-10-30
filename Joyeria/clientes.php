@@ -206,7 +206,7 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
     <title>Clientes - Sistema de Joyería</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
-    <link rel="stylesheet" href="assets/css/clientes.css" />
+    <link rel="stylesheet" href="assets/css/theme-oscuro.css" />
 </head>
 <body>
 <?php include 'includes/navbar.php'; ?>
@@ -532,5 +532,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 });
 </script>
+ <script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>

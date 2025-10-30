@@ -270,7 +270,7 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
     
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
     
-    <link rel="stylesheet" href="assets/css/ventas.css">
+    <link rel="stylesheet" href="assets/css/theme-oscuro.css">
 
     <style>
         /* Estilo para los controles de Tom-Select (los buscadores) */
@@ -577,5 +577,6 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
             });
         }
     </script>
+     <script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html> 
