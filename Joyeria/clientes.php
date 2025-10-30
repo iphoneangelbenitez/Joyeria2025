@@ -111,6 +111,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($stUpd->execute()) {
                     $mensaje = "Cliente actualizado exitosamente.";
+                    // Redirigir para limpiar el estado de edición
+                    header("Location: clientes.php?update_success=1");
+                    exit();
                 } else {
                     $error = "Error al actualizar el cliente.";
                 }
@@ -157,19 +160,15 @@ if ($esAdministrador && isset($_GET['eliminar']) && is_numeric($_GET['eliminar']
 }
 
 /* ================== Consultas para UI ================== */
-$filtroDni = $_GET['dni'] ?? '';
 
-$sqlClientes = "SELECT * FROM clientes";
-if ($filtroDni !== '') {
-    $sqlClientes .= " WHERE dni LIKE :dni";
+// Mensaje de éxito tras actualización
+if (isset($_GET['update_success'])) {
+    $mensaje = "Cliente actualizado exitosamente.";
 }
-$sqlClientes .= " ORDER BY apellido, nombre";
 
+// Carga todos los clientes para el filtro en tiempo real de JS
+$sqlClientes = "SELECT * FROM clientes ORDER BY apellido, nombre";
 $stCli = $conexion->prepare($sqlClientes);
-if ($filtroDni !== '') {
-    $dniLike = "%".$filtroDni."%";
-    $stCli->bindParam(':dni', $dniLike);
-}
 $stCli->execute();
 $clientes = $stCli->fetchAll(PDO::FETCH_ASSOC);
 
@@ -207,7 +206,6 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
     <title>Clientes - Sistema de Joyería</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
-    <!-- CSS externo estilo joyería -->
     <link rel="stylesheet" href="assets/css/clientes.css" />
 </head>
 <body>
@@ -217,13 +215,21 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
     <div class="container-fluid">
         <div class="row">
             <div class="col-12">
-                <div class="clientes-header">
-                    <h2><i class="bi bi-people me-2"></i>Gestión de Clientes</h2>
-                    <p class="mb-0">Administre los clientes de la joyería</p>
+                <div class="clientes-header d-flex align-items-center justify-content-between">
+                    <div>
+                        <h2><i class="bi bi-people me-2"></i>Gestión de Clientes</h2>
+                        <p class="mb-0">Administre los clientes de la joyería</p>
+                    </div>
                 </div>
             </div>
         </div>
-
+            <div class="row mb-3">
+                <div class="col-12">
+                    <button type="button" class="btn btn-success" id="btnAgregarCliente">
+                        <i class="bi bi-plus-circle me-1"></i> Agregar Cliente
+                    </button>
+                </div>
+            </div>
         <?php if ($error): ?>
             <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
@@ -232,41 +238,6 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
             <div class="alert alert-success"><?php echo htmlspecialchars($mensaje); ?></div>
         <?php endif; ?>
 
-        <!-- Filtros -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="filtros-container">
-                    <h5>Filtros y Búsqueda</h5>
-                    <form method="get" action="clientes.php" class="row g-3">
-                        <div class="col-md-6">
-                            <label for="dni" class="form-label">Buscar por DNI</label>
-                            <input type="text" class="form-control" id="dni" name="dni"
-                                   value="<?php echo htmlspecialchars($filtroDni); ?>" placeholder="Ingrese DNI del cliente">
-                        </div>
-                        <div class="col-md-6 d-flex align-items-end">
-                            <button type="submit" class="btn btn-primary me-2">Buscar</button>
-                            <a href="clientes.php" class="btn btn-secondary">Limpiar</a>
-                        </div>
-                    </form>
-
-                    <hr>
-                    <h5>Ver Servicios por DNI</h5>
-                    <form method="get" action="clientes.php" class="row g-3">
-                        <input type="hidden" name="ver_servicios" value="1">
-                        <div class="col-md-6">
-                            <input type="text" class="form-control" id="dni_servicios" name="dni_servicios"
-                                   value="<?php echo isset($_GET['dni_servicios']) ? htmlspecialchars($_GET['dni_servicios']) : ''; ?>"
-                                   placeholder="Ingrese DNI del cliente">
-                        </div>
-                        <div class="col-md-6">
-                            <button type="submit" class="btn btn-info">Ver Servicios</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Servicios del cliente (si aplica) -->
         <?php if (isset($_GET['ver_servicios']) && !empty($serviciosCliente)): ?>
         <div class="row mb-4">
             <div class="col-12">
@@ -283,7 +254,7 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
                             <?php
                                 $claseTipo = ($serv['tipo'] === 'MANTENIMIENTO') ? 'servicio-mantenimiento' : 'servicio-reparacion';
                                 $estado = $serv['estado'];
-                                $claseEstado = strtolower($estado); // pendiente, en_proceso, completado (ajustamos abajo)
+                                $claseEstado = strtolower($estado); 
                                 if ($claseEstado === 'en_proceso') { $claseEstado = 'proceso'; }
                             ?>
                             <div class="servicio-item <?php echo $claseTipo; ?>">
@@ -317,17 +288,19 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
         </div>
         <?php endif; ?>
 
-        <!-- Formulario alta/edición -->
-        <div class="row mb-4">
+
+        <div class="row mb-4" id="contenedorFormularioCliente" style="display: <?php echo isset($clienteEditar) ? 'block' : 'none'; ?>;">
             <div class="col-12">
                 <div class="clientes-card">
                     <div class="clientes-card-header">
-                        <h5 class="mb-0"><?php echo isset($clienteEditar) ? 'Editar Cliente' : 'Agregar Nuevo Cliente'; ?></h5>
+                        <h5 class="mb-0" id="tituloFormularioCliente"><?php echo isset($clienteEditar) ? 'Editar Cliente' : 'Agregar Nuevo Cliente'; ?></h5>
                     </div>
                     <div class="card-body">
-                        <form method="post" action="">
+                        <form method="post" action="clientes.php<?php echo isset($clienteEditar) ? '?editar='.(int)$clienteEditar['id'] : ''; ?>" id="formCliente">
                             <?php if (isset($clienteEditar)): ?>
                                 <input type="hidden" name="id" value="<?php echo (int)$clienteEditar['id']; ?>">
+                            <?php else: ?>
+                                <input type="hidden" name="id" value="">
                             <?php endif; ?>
 
                             <div class="row">
@@ -366,12 +339,13 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
                                 </div>
                             </div>
 
-                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end" id="footerFormularioCliente">
                                 <?php if (isset($clienteEditar)): ?>
                                     <button type="submit" name="actualizar_cliente" class="btn btn-primary">Actualizar Cliente</button>
-                                    <a href="clientes.php" class="btn btn-secondary">Cancelar</a>
+                                    <a href="clientes.php" class="btn btn-secondary" id="btnCancelarEdicion">Cancelar</a>
                                 <?php else: ?>
                                     <button type="submit" name="crear_cliente" class="btn btn-success">Agregar Cliente</button>
+                                    <button type="button" class="btn btn-secondary" id="btnCancelarAgregar">Cancelar</button>
                                 <?php endif; ?>
                             </div>
                         </form>
@@ -379,20 +353,23 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
                 </div>
             </div>
         </div>
-
-        <!-- Listado -->
         <div class="row">
             <div class="col-12">
                 <div class="clientes-card">
-                    <div class="clientes-card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Lista de Clientes</h5>
-                        <span class="badge bg-primary">Total: <?php echo count($clientes); ?></span>
+                    <div class="clientes-card-header">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Lista de Clientes</h5>
+                            <span class="badge bg-primary">Total: <?php echo count($clientes); ?></span>
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" id="buscadorClientes" class="form-control" placeholder="Buscar cliente por nombre, apellido o DNI...">
+                        </div>
                     </div>
                     <div class="card-body">
                         <?php if (count($clientes) > 0): ?>
-                            <div class="row">
+                            <div class="row" id="listaClientesRow">
                                 <?php foreach ($clientes as $cli): ?>
-                                    <div class="col-md-6 col-lg-4 mb-3">
+                                    <div class="col-md-6 col-lg-4 mb-3 cliente-card-wrapper">
                                         <div class="cliente-item">
                                             <div class="d-flex justify-content-between align-items-start mb-2">
                                                 <div>
@@ -430,11 +407,11 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
                                                 <?php endif; ?>
                                             </div>
 
-                        <div class="mt-2">
-                            <a href="clientes.php?ver_servicios=1&dni_servicios=<?php echo urlencode($cli['dni']); ?>" class="btn btn-sm btn-info">
-                                <i class="bi bi-tools"></i> Ver Servicios
-                            </a>
-                        </div>
+                                            <div class="mt-2">
+                                                <a href="clientes.php?ver_servicios=1&dni_servicios=<?php echo urlencode($cli['dni']); ?>" class="btn btn-sm btn-info">
+                                                    <i class="bi bi-tools"></i> Ver Servicios
+                                                </a>
+                                            </div>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
@@ -447,9 +424,113 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
             </div>
         </div>
 
-    </div><!-- container-fluid -->
-</div><!-- clientes-container -->
+    </div></div><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    // 1. Lógica del buscador en tiempo real
+    const buscador = document.getElementById('buscadorClientes');
+    const listaRow = document.getElementById('listaClientesRow');
+
+    if (buscador && listaRow) {
+        const wrappers = listaRow.getElementsByClassName('cliente-card-wrapper');
+
+        buscador.addEventListener('keyup', function() {
+            const termino = buscador.value.toLowerCase().trim();
+
+            for (let wrapper of wrappers) {
+                const item = wrapper.querySelector('.cliente-item');
+                if (!item) continue;
+                
+                const texto = item.textContent || item.innerText;
+                
+                if (texto.toLowerCase().indexOf(termino) > -1) {
+                    wrapper.style.display = '';
+                } else {
+                    wrapper.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // 2. Lógica para mostrar/ocultar formulario
+    const contenedorForm = document.getElementById('contenedorFormularioCliente');
+    const btnAgregar = document.getElementById('btnAgregarCliente');
+    const formCliente = document.getElementById('formCliente');
+    const tituloForm = document.getElementById('tituloFormularioCliente');
+    const footerForm = document.getElementById('footerFormularioCliente');
+
+    // Salir si los elementos principales no existen
+    if (!contenedorForm || !btnAgregar || !formCliente || !tituloForm || !footerForm) {
+        return;
+    }
+
+    // --- Función para resetear el formulario a "Agregar" ---
+    function resetFormulario() {
+        formCliente.reset(); 
+        formCliente.action = 'clientes.php'; // Asegura que el action esté limpio
+        
+        const idInput = formCliente.querySelector('input[name="id"]');
+        if (idInput) {
+            idInput.value = '';
+        }
+        
+        tituloForm.innerText = 'Agregar Nuevo Cliente';
+        
+        footerForm.innerHTML = `
+            <button type="submit" name="crear_cliente" class="btn btn-success">Agregar Cliente</button>
+            <button type="button" class="btn btn-secondary" id="btnCancelarAgregar">Cancelar</button>
+        `;
+    }
+
+    // --- Función para ocultar el formulario y limpiar URL ---
+    function ocultarFormulario() {
+        contenedorForm.style.display = 'none';
+        // Limpia los parámetros GET de la URL sin recargar la página
+        if (window.location.search.includes('editar=') || window.location.search.includes('update_success=')) {
+            window.history.pushState({}, document.title, window.location.pathname);
+        }
+    }
+
+    // --- Clic en el botón principal "Agregar Cliente" ---
+    btnAgregar.addEventListener('click', function() {
+        const esVisible = contenedorForm.style.display === 'block';
+        // Comprueba si el form está en modo edición (buscando el botón de actualizar)
+        const estaEditando = !!footerForm.querySelector('button[name="actualizar_cliente"]');
+
+        if (esVisible && !estaEditando) {
+            // Si está visible y en modo "Agregar", lo oculta
+            ocultarFormulario();
+        } else {
+            // Si está oculto, O si está visible pero en modo "Editar":
+            // Lo resetea a "modo agregar" y lo muestra
+            resetFormulario();
+            contenedorForm.style.display = 'block';
+            contenedorForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+
+    // --- Clic en los botones "Cancelar" (delegación de eventos) ---
+    // Se usa delegación en el footer para manejar los botones que cambian dinámicamente
+    footerForm.addEventListener('click', function(e) {
+        // Botón "Cancelar" en modo Agregar
+        if (e.target && e.target.id === 'btnCancelarAgregar') {
+            ocultarFormulario();
+        }
+        // Botón "Cancelar" en modo Editar (que es un <a>)
+        if (e.target && e.target.id === 'btnCancelarEdicion') {
+            e.preventDefault(); // Previene la recarga de la página
+            ocultarFormulario();
+        }
+    });
+
+    // --- Si la página carga con ?editar=X, hacer scroll ---
+    <?php if (isset($clienteEditar) && $clienteEditar): ?>
+        contenedorForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    <?php endif; ?>
+
+});
+</script>
 </body>
 </html>
