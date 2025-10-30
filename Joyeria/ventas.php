@@ -272,6 +272,16 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
     
     <link rel="stylesheet" href="assets/css/theme-oscuro.css">
 
+
+    <script>
+    (function() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.documentElement.classList.add('theme-light');
+        }
+    })();
+    </script>
+
     <style>
         /* Estilo para los controles de Tom-Select (los buscadores) */
         .ts-control {

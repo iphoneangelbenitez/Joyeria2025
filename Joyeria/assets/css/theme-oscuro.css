@@ -31,18 +31,26 @@
 }
 
 
-/* ---------------------------------------------------- */
-/* 2. ESTILOS GLOBALES Y UTILIDADES (Default: Oscuro)
-/* ---------------------------------------------------- */
-html,
-body {
+/* 2. ESTILOS GLOBALES Y UTILIDADES (Default: Oscuro) */
+/* Usamos :not() para aumentar la especificidad */
+html:not(.theme-light),
+html:not(.theme-light) body {
   height: 100%;
   background: radial-gradient(1200px 800px at 20% -10%, #1d212b 0%, #12151b 40%, var(--grafito) 100%) fixed;
-  color: #e9edf2;
+  color: #e9edf2; /* <-- ¡Este es tu texto blanco! */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* Dejamos el resto de los estilos del tema claro como estaban */
+/* 7. TEMA CLARO (SOBREESCRITURAS) */
+html.theme-light,
+html.theme-light body {
+  background: #f4f6f9; /* Fondo de página */
+  color: #1a1f28; /* Texto principal */
+}
+/* etc... */
 
 /* Tipografía y utilidades generales */
 h2, h4, h5, h6 {
@@ -240,6 +248,9 @@ small, .form-text {
 }
 .navbar .nav-link:hover {
   color: var(--oro) !important;
+}
+.navbar-text{
+  color: #ffffff;
 }
 
 /* --- Tablas (Unificadas) --- */
@@ -1261,13 +1272,199 @@ html.theme-light .theme-switch .slider .icon-moon {
 }
 
 
+/*
+ * =========================================
+ * 10. ARREGLOS TEMA CLARO (Navbar)
+ * =========================================
+ */
 
-/* arreglos */
-
+/* * Pone el texto del nombre de usuario ($user_name) oscuro.
+ * Usamos !important para "ganarle" a la clase 'text-light' 
+ * que está en el HTML del navbar.
+ */
 html.theme-light .navbar-text {
-  color: #1a1f28 !important; /* Texto principal oscuro */
+  color: #000000 !important; 
+}
+
+/* * ...PERO, forzamos a que la insignia (que está DENTRO) 
+ * mantenga su texto blanco (para que se lea sobre el fondo rojo/azul).
+ */
+html.theme-light .navbar-text .badge {
+  color: #fff !important; 
 }
 
 
 
+/* probando reportes */
 
+/* =========================================
+   SOBREESCRITURAS REPORTES (TEMA CLARO)
+   ========================================= */
+
+/* Borde claro para reportes */
+html.theme-light {
+  --borde-reporte: rgba(0, 0, 0, .15);
+}
+
+html.theme-light .reportes-header {
+  background: #ffffff;
+  border-color: var(--borde-reporte);
+  box-shadow: var(--sombra-suave), inset 0 1px 0 rgba(0, 0, 0, .01);
+}
+
+html.theme-light .reportes-header h2 {
+  color: #b8860b; /* Oro claro */
+}
+
+html.theme-light .reportes-header p {
+  color: #5f6e81; /* Texto secundario claro */
+}
+
+/* Filtros */
+html.theme-light .filtros-container {
+  border-color: var(--borde-reporte);
+  background: #ffffff;
+  backdrop-filter: none;
+  box-shadow: var(--sombra-suave);
+}
+
+html.theme-light .filtros-container h5 {
+  color: #b8860b;
+}
+
+/* Tarjetas */
+html.theme-light .reportes-card,
+html.theme-light .estadistica-card {
+  background: #ffffff;
+  border-color: var(--borde-reporte);
+  box-shadow: var(--sombra-suave), inset 0 1px 0 rgba(0, 0, 0, .01);
+}
+
+html.theme-light .reportes-card-header {
+  border-bottom-color: var(--borde-reporte);
+  background: #f8f9fa;
+}
+
+html.theme-light .reportes-card h5 {
+  color: #b8860b;
+}
+
+/* Estadísticas */
+html.theme-light .estadistica-titulo {
+  color: #5f6e81;
+}
+
+html.theme-light .estadistica-valor {
+  color: #b8860b;
+  text-shadow: none;
+}
+
+html.theme-light .estadistica-descripcion {
+  color: #6c757d;
+}
+
+/* Tablas Reportes */
+html.theme-light .table-responsive-reporte {
+  border-color: var(--borde-reporte);
+}
+
+html.theme-light .table-reporte thead th {
+  color: #b8860b !important;
+  border-bottom-color: var(--borde-reporte) !important;
+  background: #f8f9fa;
+}
+
+html.theme-light .table-reporte.table-hover tbody tr:hover {
+  background: rgba(184, 134, 11, .05); /* Oro muy suave */
+}
+
+/* Tabs */
+html.theme-light .nav-tabs-reporte {
+  border-bottom-color: var(--borde-reporte);
+}
+html.theme-light .nav-tabs-reporte .nav-link {
+  color: #5f6e81;
+  background: #f8f9fa;
+}
+html.theme-light .nav-tabs-reporte .nav-link:hover {
+  color: #b8860b;
+  border-color: var(--borde-reporte);
+}
+html.theme-light .nav-tabs-reporte .nav-link.active {
+  color: #b8860b;
+  background: #ffffff;
+  border-color: var(--borde-reporte);
+}
+
+/* ======= BADGES CLAROS (FUSIONADOS) ======= */
+
+/* Badges Movimiento (Inventario) */
+html.theme-light .badge-movimiento.badge-entrada {
+  background: #d4edda;
+  color: #155724;
+  border-color: transparent;
+}
+html.theme-light .badge-movimiento.badge-salida {
+  background: #f8d7da;
+  color: #721c24;
+  border-color: transparent;
+}
+html.theme-light .badge-movimiento.badge-ajuste {
+  background: #fff3cd;
+  color: #856404;
+  border-color: transparent;
+}
+
+/* Estados de stock (Inventario) */
+html.theme-light .stock-critico {
+  background: linear-gradient(90deg, #f8d7da, transparent 70%) !important;
+}
+html.theme-light .stock-bajo {
+  background: linear-gradient(90deg, #fff3cd, transparent 70%) !important;
+}
+
+/* Badges Estado (Servicios) */
+html.theme-light .badge-pendiente {
+  background: #fff3cd;
+  color: #856404;
+  border-color: transparent;
+}
+html.theme-light .badge-proceso {
+  background: #d1ecf1;
+  color: #0c5460;
+  border-color: transparent;
+}
+html.theme-light .badge-completado {
+  background: #d4edda;
+  color: #155724;
+  border-color: transparent;
+}
+
+/* Badges Tipo (Servicios) */
+html.theme-light .badge-mantenimiento {
+  background: #d1ecf1;
+  color: #0c5460;
+  border-color: transparent;
+}
+html.theme-light .badge-reparacion {
+  background: #ffe8d1;
+  color: #854a04;
+  border-color: transparent;
+}
+
+/* Badges Pago (Ventas) */
+html.theme-light .badge-venta.badge-efectivo {
+  background: #d4edda;
+  color: #155724;
+  border-color: transparent;
+}
+html.theme-light .badge-venta.badge-tarjeta {
+  background: #d1ecf1;
+  color: #0c5460;
+  border-color: transparent;
+}
+html.theme-light .badge-venta.badge-transferencia {
+  background: #e6e0ff;
+  color: #3b2a85;
+  border-color: transparent;
+}

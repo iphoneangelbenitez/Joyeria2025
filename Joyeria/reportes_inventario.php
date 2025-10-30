@@ -143,7 +143,17 @@ $data_stock_categoria = json_encode(array_column($stock_por_categoria, 'total_st
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="assets/css/reportes_inventario.css">
+    <link rel="stylesheet" href="assets/css/theme-oscuro.css">
+    <link rel="stylesheet" href="assets/css/theme-oscuro-reportes.css">
+
+    <script>
+    (function() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.documentElement.classList.add('theme-light');
+        }
+    })();
+</script>
 
 </head>
 <body>
@@ -509,5 +519,8 @@ $data_stock_categoria = json_encode(array_column($stock_por_categoria, 'total_st
             window.open(url, '_blank');
         }
     </script>
+    </script>
+
+<script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>

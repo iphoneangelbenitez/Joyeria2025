@@ -1,7 +1,5 @@
 <?php
 
-
-
 // Función para determinar si un enlace está activo
 function isActive($page) {
     return (basename($_SERVER['PHP_SELF']) == $page) ? 'active' : '';
@@ -9,40 +7,46 @@ function isActive($page) {
 
 // Solo cargar datos de notificaciones si el usuario es administrador
 $productos_bajo_stock = [];
-if ($_SESSION['user_type'] == 'ADM') {
-    require_once "config/database.php";
-    try {
-        $database = new Database();
-        $db = $database->getConnection();
-        
-        // Consulta optimizada para obtener solo productos con stock bajo
-        $query = "SELECT nombre, stock, stock_minimo FROM productos 
-                 WHERE stock <= stock_minimo AND oculto = 0 LIMIT 5";
-        $stmt = $db->prepare($query);
-        $stmt->execute();
-        $productos_bajo_stock = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        // Log error pero no romper la navegación
-        error_log("Error al cargar notificaciones: " . $e->getMessage());
+
+// Comprobación de sesión robusta para user_type
+$user_type = 'USR'; // Default
+if (isset($_SESSION['tipo_usuario'])) {
+    $user_type = (string)$_SESSION['tipo_usuario'];
+} elseif (isset($_SESSION['user_type'])) {
+    $user_type = (string)$_SESSION['user_type'];
+}
+
+if ($user_type == 'ADM') {
+    // Solo incluir y conectar si es ADM
+    if (file_exists("config/database.php")) { // Verificar si el archivo existe
+        require_once "config/database.php";
+        try {
+            $database = new Database();
+            $db = $database->getConnection();
+            
+            // Consulta optimizada para obtener solo productos con stock bajo
+            $query = "SELECT nombre, stock, stock_minimo FROM productos 
+                      WHERE stock <= stock_minimo AND oculto = 0 LIMIT 5";
+            $stmt = $db->prepare($query);
+            $stmt->execute();
+            $productos_bajo_stock = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            // Log error pero no romper la navegación
+            error_log("Error al cargar notificaciones: " . $e->getMessage());
+        }
     }
 }
 
 // Asegurarse de que las variables de sesión sean strings
-$user_name = isset($_SESSION['user_name']) ? (string)$_SESSION['user_name'] : 'Usuario';
-$user_type = isset($_SESSION['user_type']) ? (string)$_SESSION['user_type'] : 'USR';
+$user_name = 'Usuario'; // Default
+if (isset($_SESSION['nombre_usuario'])) {
+    $user_name = (string)$_SESSION['nombre_usuario'];
+} elseif (isset($_SESSION['user_name'])) {
+    $user_name = (string)$_SESSION['user_name'];
+}
 ?>
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-</head>
-<body>
-
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+<nav class="navbar navbar-expand-lg fixed-top">
     <div class="container-fluid">
         <a class="navbar-brand" href="index.php">
             <i class="bi bi-gem me-2"></i>Joyería Sosa
@@ -111,10 +115,7 @@ $user_type = isset($_SESSION['user_type']) ? (string)$_SESSION['user_type'] : 'U
                 </li>
                 <?php endif; ?>
 
-             
-            
-            <ul class="navbar-nav ms-auto">
-                <!-- Notificación para stock bajo (solo administradores) -->
+             </ul> <ul class="navbar-nav ms-auto">
                 <?php if ($user_type == 'ADM' && count($productos_bajo_stock) > 0): ?>
                 <li class="nav-item dropdown me-2">
                     <a class="nav-link position-relative" href="#" id="notificationsDropdown" role="button" 
@@ -149,22 +150,16 @@ $user_type = isset($_SESSION['user_type']) ? (string)$_SESSION['user_type'] : 'U
                 </li>
                 <?php endif; ?>
                 
-            <!-- * probando navbar -->
-         <li class="nav-item me-2 d-flex align-items-center"> <button id="theme-toggle-btn" class="theme-switch" type="button" role="switch" aria-label="Cambiar tema">
-        
-        <span class="slider">
-            <i class="bi bi-sun-fill icon-sun"></i>
-            <i class="bi bi-moon-fill icon-moon"></i>
-        </span>
-    </button>
-    
-</li>
-
-
-
-
-                <li class="nav-item">
-                    <span class="navbar-text text-light me-3">
+            <li class="nav-item me-2 d-flex align-items-center"> 
+                <button id="theme-toggle-btn" class="theme-switch" type="button" role="switch" aria-label="Cambiar tema">
+                    <span class="slider">
+                        <i class="bi bi-sun-fill icon-sun"></i>
+                        <i class="bi bi-moon-fill icon-moon"></i>
+                    </span>
+                </button>
+            </li> 
+            <li class="nav-item">
+                    <span class="navbar-text me-3"> 
                         <i class="bi bi-person-circle me-1"></i>
                         <?= htmlspecialchars($user_name) ?> 
                         <span class="badge bg-<?= ($user_type == 'ADM') ? 'danger' : 'info' ?>">
@@ -206,8 +201,4 @@ $user_type = isset($_SESSION['user_type']) ? (string)$_SESSION['user_type'] : 'U
     </div>
 </nav>
 
-<!-- Espacio para compensar la barra de navegación fija -->
 <div style="height: 76px;"></div>
-
-</body>
-</html>

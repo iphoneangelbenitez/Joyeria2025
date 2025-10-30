@@ -133,7 +133,17 @@ if ($esAdministrador) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="assets/css/reportes_ventas.css" />
+    <link rel="stylesheet" href="assets/css/theme-oscuro.css">
+    <link rel="stylesheet" href="assets/css/theme-oscuro-reportes.css">
+
+    <script>
+    (function() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.documentElement.classList.add('theme-light');
+        }
+    })();
+</script>
 </head>
 <body>
     <?php include 'includes/navbar.php'; ?>
@@ -428,5 +438,8 @@ if ($esAdministrador) {
             window.open(url, '_blank');
         }
     </script>
+    </script>
+
+<script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>
