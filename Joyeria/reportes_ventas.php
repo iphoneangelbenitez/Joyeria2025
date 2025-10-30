@@ -419,11 +419,13 @@ if ($esAdministrador) {
             new Chart(ctxMetodosPago, metodosPagoConfig);
         });
 
-        // Función para exportar a PDF (simulada)
+        // Función para exportar a PDF
         function exportarPDF() {
-            alert('Funcionalidad de exportación a PDF en desarrollo. Se descargará un reporte en formato PDF.');
-            // En una implementación real, aquí se redirigiría a un script que genere el PDF
-            window.open('generar_reporte_pdf.php?fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&metodo_pago=<?php echo $metodo_pago; ?>', '_blank');
+            // Construir la URL con todos los filtros
+            const url = `generar_reporte_pdf.php?fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&metodo_pago=<?php echo $metodo_pago; ?>&id_vendedor=<?php echo $id_vendedor; ?>`;
+            
+            // Abrir la página de impresión en una nueva pestaña
+            window.open(url, '_blank');
         }
     </script>
 </body>

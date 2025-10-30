@@ -40,6 +40,9 @@ $params = [
 if (!empty($tipo_movimiento)) {
     $query_movimientos .= " AND m.tipo = :tipo_movimiento";
     $params[':tipo_movimiento'] = $tipo_movimiento;
+} else {
+    // MODIFICACIÓN: Excluir 'AJUSTE' si no se selecciona ningún tipo
+    $query_movimientos .= " AND m.tipo != 'AJUSTE'";
 }
 
 if (!empty($categoria)) {
@@ -95,6 +98,7 @@ $query_movimientos_tipo = "SELECT
     SUM(cantidad) as total_cantidad
 FROM movimientos_stock 
 WHERE fecha BETWEEN :fecha_inicio AND :fecha_fin
+AND tipo != 'AJUSTE' -- MODIFICACIÓN: Excluir AJUSTE del gráfico
 GROUP BY tipo";
 
 $stmt_movimientos_tipo = $db->prepare($query_movimientos_tipo);
@@ -108,6 +112,25 @@ $query_categorias = "SELECT * FROM categorias ORDER BY nombre";
 $stmt_categorias = $db->prepare($query_categorias);
 $stmt_categorias->execute();
 $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
+
+// MODIFICACIÓN: Consulta para gráfico de productos por categoría (stock real)
+$query_stock_categoria = "SELECT 
+    c.nombre as categoria_nombre,
+    SUM(p.stock) as total_stock
+FROM productos p
+INNER JOIN categorias c ON p.id_categoria = c.id
+WHERE p.oculto = 0 AND p.stock > 0
+GROUP BY c.id, c.nombre
+HAVING SUM(p.stock) > 0
+ORDER BY total_stock DESC";
+
+$stmt_stock_categoria = $db->prepare($query_stock_categoria);
+$stmt_stock_categoria->execute();
+$stock_por_categoria = $stmt_stock_categoria->fetchAll(PDO::FETCH_ASSOC);
+
+// Preparar datos para JS
+$labels_stock_categoria = json_encode(array_column($stock_por_categoria, 'categoria_nombre'));
+$data_stock_categoria = json_encode(array_column($stock_por_categoria, 'total_stock'));
 ?>
 
 
@@ -137,7 +160,6 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Filtros -->
             <div class="row mb-4">
                 <div class="col-md-12">
                     <div class="filtros-container">
@@ -157,7 +179,6 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                                     <option value="">Todos los tipos</option>
                                     <option value="ENTRADA" <?php echo $tipo_movimiento == 'ENTRADA' ? 'selected' : ''; ?>>Entrada</option>
                                     <option value="SALIDA" <?php echo $tipo_movimiento == 'SALIDA' ? 'selected' : ''; ?>>Salida</option>
-                                    <option value="AJUSTE" <?php echo $tipo_movimiento == 'AJUSTE' ? 'selected' : ''; ?>>Ajuste</option>
                                 </select>
                             </div>
                             <div class="col-md-2">
@@ -191,7 +212,6 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Estadísticas generales -->
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="estadistica-card">
@@ -223,7 +243,6 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Gráficos -->
             <div class="row mb-4">
                 <div class="col-md-6">
                     <div class="reportes-card">
@@ -284,7 +303,6 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Pestañas para diferentes vistas -->
             <div class="row">
                 <div class="col-md-12">
                     <ul class="nav nav-tabs" id="inventarioTabs" role="tablist">
@@ -301,7 +319,6 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                     </ul>
                     
                     <div class="tab-content" id="inventarioTabsContent">
-                        <!-- Pestaña de Movimientos -->
                         <div class="tab-pane fade show active" id="movimientos" role="tabpanel">
                             <div class="reportes-card mt-0">
                                 <div class="reportes-card-header d-flex justify-content-between align-items-center">
@@ -347,17 +364,16 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                                             </table>
                                         </div>
                                     <?php else: ?>
-                                        <div class="alert alert-info">No hay movimientos que coincidan con los filtros aplicados.</div>
+                                        <div class="alert alert-info">No hay movimientos que coincidan con los filtros aplicados (Entrada/Salida).</div>
                                     <?php endif; ?>
                                 </div>
                             </div>
                         </div>
                         
-                        <!-- Pestaña de Resumen -->
                         <div class="tab-pane fade" id="resumen" role="tabpanel">
                             <div class="reportes-card mt-0">
                                 <div class="reportes-card-header">
-                                    <h5 class="mb-0">Resumen de Productos por Categoría</h5>
+                                    <h5 class="mb-0">Resumen de Stock por Categoría</h5>
                                 </div>
                                 <div class="card-body">
                                     <div class="chart-container">
@@ -382,13 +398,12 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                 data: [<?php echo implode(',', array_column($movimientos_por_tipo, 'cantidad')); ?>],
                 backgroundColor: [
                     'rgba(40, 167, 69, 0.8)',    // Entrada - verde
-                    'rgba(220, 53, 69, 0.8)',    // Salida - rojo
-                    'rgba(255, 193, 7, 0.8)'     // Ajuste - amarillo
+                    'rgba(220, 53, 69, 0.8)'    // Salida - rojo
+                    // MODIFICACIÓN: Se quita el color de Ajuste
                 ],
                 borderColor: [
                     'rgba(40, 167, 69, 1)',
-                    'rgba(220, 53, 69, 1)',
-                    'rgba(255, 193, 7, 1)'
+                    'rgba(220, 53, 69, 1)'
                 ],
                 borderWidth: 1
             }]
@@ -417,27 +432,34 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
             }
         };
 
-        // Datos para gráfico de productos por categoría (simulado)
-        // En una implementación real, se obtendrían estos datos de la base de datos
+        // MODIFICACIÓN: Gráfico de productos por categoría con datos reales
+        
+        // Función para generar colores aleatorios
+        function getRandomColor(index) {
+            const colors = [
+                'rgba(212, 175, 55, 0.8)',
+                'rgba(192, 192, 192, 0.8)',
+                'rgba(139, 69, 19, 0.8)',
+                'rgba(0, 123, 255, 0.8)',
+                'rgba(220, 53, 69, 0.8)',
+                'rgba(40, 167, 69, 0.8)',
+                'rgba(255, 193, 7, 0.8)',
+                'rgba(23, 162, 184, 0.8)'
+            ];
+            return colors[index % colors.length];
+        }
+
+        const labelsCategoria = <?php echo $labels_stock_categoria; ?>;
+        const dataCategoria = <?php echo $data_stock_categoria; ?>;
+        const backgroundColors = dataCategoria.map((_, index) => getRandomColor(index));
+
         const productosCategoriaData = {
-            labels: ['Anillos', 'Collares', 'Relojes', 'Pulseras', 'Aretes'],
+            labels: labelsCategoria,
             datasets: [{
-                label: 'Productos por Categoría',
-                data: [45, 32, 28, 21, 18],
-                backgroundColor: [
-                    'rgba(212, 175, 55, 0.8)',
-                    'rgba(192, 192, 192, 0.8)',
-                    'rgba(139, 69, 19, 0.8)',
-                    'rgba(0, 0, 0, 0.8)',
-                    'rgba(255, 215, 0, 0.8)'
-                ],
-                borderColor: [
-                    'rgba(212, 175, 55, 1)',
-                    'rgba(192, 192, 192, 1)',
-                    'rgba(139, 69, 19, 1)',
-                    'rgba(0, 0, 0, 1)',
-                    'rgba(255, 215, 0, 1)'
-                ],
+                label: 'Stock por Categoría',
+                data: dataCategoria,
+                backgroundColor: backgroundColors,
+                borderColor: backgroundColors.map(color => color.replace('0.8', '1')),
                 borderWidth: 1
             }]
         };
@@ -464,15 +486,27 @@ $categorias = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
             new Chart(ctxMovimientosTipo, movimientosTipoConfig);
 
             // Gráfico de productos por categoría
-            const ctxProductosCategoria = document.getElementById('chartProductosCategoria').getContext('2d');
-            new Chart(ctxProductosCategoria, productosCategoriaConfig);
+            if (dataCategoria.length > 0) {
+                const ctxProductosCategoria = document.getElementById('chartProductosCategoria').getContext('2d');
+                new Chart(ctxProductosCategoria, productosCategoriaConfig);
+            } else {
+                // Opcional: Mostrar mensaje si no hay datos para el gráfico
+                document.getElementById('chartProductosCategoria').parentElement.innerHTML = 
+                    '<div class="alert alert-info">No hay datos de stock por categoría para mostrar.</div>';
+            }
         });
 
-        // Función para exportar a PDF (simulada)
+        // MODIFICACIÓN: Función para exportar a PDF (abre la nueva página de impresión)
         function exportarPDF() {
-            alert('Funcionalidad de exportación a PDF en desarrollo. Se descargará un reporte en formato PDF.');
-            // En una implementación real, aquí se redirigiría a un script que genere el PDF
-            window.open('generar_reporte_inventario_pdf.php?fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&tipo_movimiento=<?php echo $tipo_movimiento; ?>&categoria=<?php echo $categoria; ?>', '_blank');
+            // Usamos las variables PHP que reflejan los filtros *aplicados*
+            const fecha_inicio = '<?php echo $fecha_inicio; ?>';
+            const fecha_fin = '<?php echo $fecha_fin; ?>';
+            const tipo_movimiento = '<?php echo $tipo_movimiento; ?>';
+            const categoria = '<?php echo $categoria; ?>';
+            
+            const url = `reporte_movimientos_print.php?fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}&tipo_movimiento=${tipo_movimiento}&categoria=${categoria}`;
+            
+            window.open(url, '_blank');
         }
     </script>
 </body>

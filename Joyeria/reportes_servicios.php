@@ -21,6 +21,7 @@ $estado_servicio = $_GET['estado_servicio'] ?? '';
 $dni_cliente = $_GET['dni_cliente'] ?? '';
 
 // Construir consulta base para servicios
+// (La consulta ya incluye s.fecha_completado, lo cual es necesario para el cambio)
 $query_servicios = "SELECT s.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido, 
                            c.dni as cliente_dni, c.telefono as cliente_telefono,
                            DATEDIFF(s.fecha_entrega_estimada, s.fecha_ingreso) as dias_estimados,
@@ -167,7 +168,6 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Filtros -->
             <div class="row mb-4">
                 <div class="col-md-12">
                     <div class="filtros-container">
@@ -214,7 +214,6 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Estadísticas generales -->
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="estadistica-card">
@@ -246,7 +245,6 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Gráficos -->
             <div class="row mb-4">
                 <div class="col-md-6">
                     <div class="reportes-card">
@@ -274,7 +272,6 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <!-- Servicios atrasados -->
             <?php if (count($servicios_atrasados) > 0): ?>
             <div class="row mb-4">
                 <div class="col-md-12">
@@ -336,108 +333,80 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <?php endif; ?>
 
-            <!-- Pestañas para diferentes vistas -->
             <div class="row">
                 <div class="col-md-12">
-                    <ul class="nav nav-tabs" id="serviciosTabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="detalles-tab" data-bs-toggle="tab" data-bs-target="#detalles" type="button" role="tab">
-                                Detalle de Servicios
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="resumen-tab" data-bs-toggle="tab" data-bs-target="#resumen" type="button" role="tab">
-                                Resumen por Cliente
-                            </button>
-                        </li>
-                    </ul>
-                    
-                    <div class="tab-content" id="serviciosTabsContent">
-                        <!-- Pestaña de Detalles -->
-                        <div class="tab-pane fade show active" id="detalles" role="tabpanel">
-                            <div class="reportes-card mt-0">
-                                <div class="reportes-card-header d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0">Detalle de Servicios</h5>
-                                    <span class="badge bg-primary">Total: <?php echo count($servicios); ?></span>
-                                </div>
-                                <div class="card-body">
-                                    <?php if (count($servicios) > 0): ?>
-                                        <div class="table-responsive">
-                                            <table class="table table-hover table-servicios">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Fecha Ingreso</th>
-                                                        <th>Cliente</th>
-                                                        <th>DNI</th>
-                                                        <th>Producto</th>
-                                                        <th>Tipo</th>
-                                                        <th>Estado</th>
-                                                        <th>Entrega Estimada</th>
-                                                        <th>Costo</th>
-                                                        <th>Duración</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($servicios as $servicio): ?>
-                                                        <tr>
-                                                            <td><?php echo date('d/m/Y', strtotime($servicio['fecha_ingreso'])); ?></td>
-                                                            <td><?php echo htmlspecialchars($servicio['cliente_apellido'] . ', ' . $servicio['cliente_nombre']); ?></td>
-                                                            <td><?php echo htmlspecialchars($servicio['cliente_dni']); ?></td>
-                                                            <td><?php echo htmlspecialchars($servicio['producto']); ?></td>
-                                                            <td>
-                                                                <span class="badge-tipo badge-<?php echo strtolower($servicio['tipo']); ?>">
-                                                                    <?php echo $servicio['tipo'] == 'MANTENIMIENTO' ? 'Mantenimiento' : 'Reparación'; ?>
-                                                                </span>
-                                                            </td>
-                                                            <td>
-                                                                <span class="badge-estado badge-<?php echo strtolower($servicio['estado']); ?>">
-                                                                    <?php 
-                                                                    switch ($servicio['estado']) {
-                                                                        case 'PENDIENTE': echo 'Pendiente'; break;
-                                                                        case 'EN_PROCESO': echo 'En Proceso'; break;
-                                                                        case 'COMPLETADO': echo 'Completado'; break;
-                                                                    }
-                                                                    ?>
-                                                                </span>
-                                                            </td>
-                                                            <td><?php echo date('d/m/Y', strtotime($servicio['fecha_entrega_estimada'])); ?></td>
-                                                            <td>$<?php echo number_format($servicio['costo_servicio'], 2); ?></td>
-                                                            <td>
-                                                                <?php if ($servicio['estado'] == 'COMPLETADO'): ?>
-                                                                    <?php echo $servicio['dias_reales']; ?> días
-                                                                <?php else: ?>
-                                                                    <em>En curso</em>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="alert alert-info">No hay servicios que coincidan con los filtros aplicados.</div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
+                    <div class="reportes-card">
+                        <div class="reportes-card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Detalle de Servicios</h5>
+                            <span class="badge bg-primary">Total: <?php echo count($servicios); ?></span>
                         </div>
-                        
-                        <!-- Pestaña de Resumen por Cliente -->
-                        <div class="tab-pane fade" id="resumen" role="tabpanel">
-                            <div class="reportes-card mt-0">
-                                <div class="reportes-card-header">
-                                    <h5 class="mb-0">Resumen de Servicios por Cliente</h5>
+                        <div class="card-body">
+                            <?php if (count($servicios) > 0): ?>
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-servicios">
+                                        <thead>
+                                            <tr>
+                                                <th>Fecha Ingreso</th>
+                                                <th>Cliente</th>
+                                                <th>DNI</th>
+                                                <th>Producto</th>
+                                                <th>Tipo</th>
+                                                <th>Estado</th>
+                                                <th>Entrega</th> <th>Costo</th>
+                                                <th>Duración</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($servicios as $servicio): ?>
+                                                <tr>
+                                                    <td><?php echo date('d/m/Y', strtotime($servicio['fecha_ingreso'])); ?></td>
+                                                    <td><?php echo htmlspecialchars($servicio['cliente_apellido'] . ', ' . $servicio['cliente_nombre']); ?></td>
+                                                    <td><?php echo htmlspecialchars($servicio['cliente_dni']); ?></td>
+                                                    <td><?php echo htmlspecialchars($servicio['producto']); ?></td>
+                                                    <td>
+                                                        <span class="badge-tipo badge-<?php echo strtolower($servicio['tipo']); ?>">
+                                                            <?php echo $servicio['tipo'] == 'MANTENIMIENTO' ? 'Mantenimiento' : 'Reparación'; ?>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge-estado badge-<?php echo strtolower($servicio['estado']); ?>">
+                                                            <?php 
+                                                            switch ($servicio['estado']) {
+                                                                case 'PENDIENTE': echo 'Pendiente'; break;
+                                                                case 'EN_PROCESO': echo 'En Proceso'; break;
+                                                                case 'COMPLETADO': echo 'Completado'; break;
+                                                            }
+                                                            ?>
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <?php if ($servicio['estado'] == 'COMPLETADO' && !empty($servicio['fecha_completado'])): ?>
+                                                            <?php echo date('d/m/Y', strtotime($servicio['fecha_completado'])); ?>
+                                                        <?php else: ?>
+                                                            <em>Pendiente</em>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>$<?php echo number_format($servicio['costo_servicio'], 2); ?></td>
+                                                    <td>
+                                                        <?php if ($servicio['estado'] == 'COMPLETADO'): ?>
+                                                            <?php echo $servicio['dias_reales']; ?> días
+                                                        <?php else: ?>
+                                                            <em>En curso</em>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div class="card-body">
-                                    <div class="chart-container">
-                                        <canvas id="chartServiciosCliente"></canvas>
-                                    </div>
-                                </div>
-                            </div>
+                            <?php else: ?>
+                                <div class="alert alert-info">No hay servicios que coincidan con los filtros aplicados.</div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+            </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -524,41 +493,7 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
             }
         };
 
-        // Datos para gráfico de servicios por cliente (simulado)
-        // En una implementación real, se obtendrían estos datos de la base de datos
-        const serviciosClienteData = {
-            labels: ['Cliente A', 'Cliente B', 'Cliente C', 'Cliente D', 'Cliente E'],
-            datasets: [{
-                label: 'Servicios por Cliente',
-                data: [8, 5, 3, 7, 4],
-                backgroundColor: 'rgba(212, 175, 55, 0.8)',
-                borderColor: 'rgba(212, 175, 55, 1)',
-                borderWidth: 1
-            }]
-        };
-
-        // Configuración del gráfico de servicios por cliente
-        const serviciosClienteConfig = {
-            type: 'bar',
-            data: serviciosClienteData,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
-                }
-            }
-        };
+        // (Se eliminó el JavaScript del gráfico de clientes)
 
         // Inicializar gráficos cuando el documento esté listo
         document.addEventListener('DOMContentLoaded', function() {
@@ -569,18 +504,26 @@ $servicios_atrasados = $stmt_atrasados->fetchAll(PDO::FETCH_ASSOC);
             // Gráfico de servicios por tipo
             const ctxServiciosTipo = document.getElementById('chartServiciosTipo').getContext('2d');
             new Chart(ctxServiciosTipo, serviciosTipoConfig);
-
-            // Gráfico de servicios por cliente
-            const ctxServiciosCliente = document.getElementById('chartServiciosCliente').getContext('2d');
-            new Chart(ctxServiciosCliente, serviciosClienteConfig);
+            
+            // (Se eliminó la inicialización del gráfico de clientes)
         });
 
-        // Función para exportar a PDF (simulada)
+        // INICIO FUNCIÓN MODIFICADA: exportarPDF
         function exportarPDF() {
-            alert('Funcionalidad de exportación a PDF en desarrollo. Se descargará un reporte en formato PDF.');
-            // En una implementación real, aquí se redirigiría a un script que genere el PDF
-            window.open('generar_reporte_servicios_pdf.php?fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&tipo_servicio=<?php echo $tipo_servicio; ?>&estado_servicio=<?php echo $estado_servicio; ?>&dni_cliente=<?php echo $dni_cliente; ?>', '_blank');
+            // 1. Obtener los valores actuales de los filtros desde el formulario
+            const fecha_inicio = document.getElementById('fecha_inicio').value;
+            const fecha_fin = document.getElementById('fecha_fin').value;
+            const tipo_servicio = document.getElementById('tipo_servicio').value;
+            const estado_servicio = document.getElementById('estado_servicio').value;
+            const dni_cliente = document.getElementById('dni_cliente').value;
+
+            // 2. Construir la URL para el script de generación de PDF
+            const url = `generar_reporte_servicios_pdf.php?fecha_inicio=${encodeURIComponent(fecha_inicio)}&fecha_fin=${encodeURIComponent(fecha_fin)}&tipo_servicio=${encodeURIComponent(tipo_servicio)}&estado_servicio=${encodeURIComponent(estado_servicio)}&dni_cliente=${encodeURIComponent(dni_cliente)}`;
+
+            // 3. Abrir la URL en una nueva pestaña
+            window.open(url, '_blank');
         }
+        // FIN FUNCIÓN MODIFICADA
     </script>
 </body>
 </html>
