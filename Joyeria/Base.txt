@@ -113,3 +113,53 @@ CREATE TABLE movimientos_stock (
     FOREIGN KEY (id_producto) REFERENCES productos(id),
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id)
 );
+
+
+NUEVO
+-- Tabla para compras/ingresos
+CREATE TABLE compras (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    id_proveedor INT NOT NULL,
+    fecha_compra DATE NOT NULL,
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total DECIMAL(10,2) NOT NULL,
+    forma_pago ENUM('EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'CHEQUE') NOT NULL,
+    imagen_factura VARCHAR(255),
+    id_usuario INT NOT NULL,
+    observaciones TEXT,
+    FOREIGN KEY (id_proveedor) REFERENCES proveedores(id),
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id)
+);
+
+-- Tabla para detalles de compra
+CREATE TABLE compra_detalles (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    id_compra INT NOT NULL,
+    id_producto INT NOT NULL,
+    cantidad INT NOT NULL,
+    costo_unitario DECIMAL(10,2) NOT NULL,
+    subtotal DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (id_compra) REFERENCES compras(id) ON DELETE CASCADE,
+    FOREIGN KEY (id_producto) REFERENCES productos(id)
+);
+
+-- Tabla para egresos masivos
+CREATE TABLE egresos (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    fecha_egreso DATE NOT NULL,
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    motivo VARCHAR(255) NOT NULL,
+    observaciones TEXT,
+    id_usuario INT NOT NULL,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id)
+);
+
+-- Tabla para detalles de egreso
+CREATE TABLE egreso_detalles (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    id_egreso INT NOT NULL,
+    id_producto INT NOT NULL,
+    cantidad INT NOT NULL,
+    FOREIGN KEY (id_egreso) REFERENCES egresos(id) ON DELETE CASCADE,
+    FOREIGN KEY (id_producto) REFERENCES productos(id)
+);

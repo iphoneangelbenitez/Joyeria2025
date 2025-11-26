@@ -32,7 +32,6 @@ $error = '';
 $accion = $_GET['action'] ?? '';
 $idUsuario = isset($_SESSION['id_usuario']) ? (int)$_SESSION['id_usuario'] : (int)$_SESSION['user_id'];
 
-
 /* Procesar formularios solo si es administrador */
 if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -45,10 +44,9 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $idProveedor = (int)($_POST['id_proveedor'] ?? 0);
             $costo = (float)($_POST['costo'] ?? 0);
             $porcentajeGanancia = (float)($_POST['porcentaje_ganancia'] ?? 0);
-            $stock = (int)($_POST['stock'] ?? 0); // Stock inicial
+            $stock = (int)($_POST['stock'] ?? 0);
             $stockMinimo = (int)($_POST['stock_minimo'] ?? 0);
 
-            // Calcular precio basado en costo y % de ganancia
             $precio = $costo + ($costo * $porcentajeGanancia / 100);
 
             $consultaCrear = "INSERT INTO productos 
@@ -69,7 +67,6 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($sentenciaCrear->execute()) {
                 $idProducto = $conexion->lastInsertId();
 
-                // Registrar movimiento de stock (ALTA) solo si el stock inicial es > 0
                 if ($stock > 0) {
                     $consultaMovimiento = "INSERT INTO movimientos_stock 
                         (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
@@ -104,7 +101,6 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $porcentajeGanancia = (float)($_POST['porcentaje_ganancia'] ?? 0);
             $stockMinimo = (int)($_POST['stock_minimo'] ?? 0);
 
-            // Calcular nuevo precio
             $precio = $costo + ($costo * $porcentajeGanancia / 100);
 
             $consultaActualizar = "UPDATE productos 
@@ -124,12 +120,6 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $sentenciaActualizar->bindParam(':stock_minimo', $stockMinimo, PDO::PARAM_INT);
 
             if ($sentenciaActualizar->execute()) {
-                
-                // --- MODIFICACIÓN ---
-                // Se eliminó el bloque que actualizaba el stock desde aquí.
-                // El stock ahora solo se maneja por "ajustar_stock" (ingreso/egreso).
-                // --- FIN MODIFICACIÓN ---
-
                 $mensaje = "Producto actualizado exitosamente.";
             } else {
                 $error = "Error al actualizar el producto.";
@@ -139,82 +129,232 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // --- NUEVO BLOQUE ---
-    /* Ajustar Stock (Ingreso/Egreso desde Modal) */
-    if (isset($_POST['ajustar_stock'])) {
+    /* Procesar Ingreso Masivo */
+    if (isset($_POST['procesar_ingreso_masivo'])) {
+        $transaccionActiva = false;
         try {
-            $idProducto = (int)($_POST['id_producto'] ?? 0);
-            $tipoMovimiento = $_POST['tipo_ajuste'] ?? ''; // 'ENTRADA' o 'SALIDA'
-            $cantidad = (int)($_POST['cantidad'] ?? 0);
-            $motivo = $_POST['motivo'] ?? 'Ajuste de stock';
-
-            if ($idProducto > 0 && ($tipoMovimiento === 'ENTRADA' || $tipoMovimiento === 'SALIDA') && $cantidad > 0) {
-                
-                // 1. Obtener stock actual
-                $consultaStockActual = "SELECT stock FROM productos WHERE id = :id FOR UPDATE"; // Bloquear fila
-                $sentenciaStockActual = $conexion->prepare($consultaStockActual);
-                $sentenciaStockActual->bindParam(':id', $idProducto, PDO::PARAM_INT);
-                $sentenciaStockActual->execute();
-                $filaStock = $sentenciaStockActual->fetch(PDO::FETCH_ASSOC);
-                $stockActual = $filaStock ? (int)$filaStock['stock'] : 0;
-
-                $nuevoStock = $stockActual;
-
-                // 2. Calcular nuevo stock y validar
-                if ($tipoMovimiento === 'ENTRADA') {
-                    $nuevoStock = $stockActual + $cantidad;
-                } else { // SALIDA
-                    if ($cantidad > $stockActual) {
-                        $error = "Error: No se puede registrar una salida mayor al stock actual ($stockActual).";
-                    } else {
-                        $nuevoStock = $stockActual - $cantidad;
-                    }
-                }
-
-                // 3. Si no hubo error, actualizar e insertar movimiento
-                if (empty($error)) {
-                    // Actualizar stock en productos
-                    $consultaUpdateStock = "UPDATE productos SET stock = :stock WHERE id = :id";
-                    $sentenciaUpdateStock = $conexion->prepare($consultaUpdateStock);
-                    $sentenciaUpdateStock->bindParam(':stock', $nuevoStock, PDO::PARAM_INT);
-                    $sentenciaUpdateStock->bindParam(':id', $idProducto, PDO::PARAM_INT);
-                    
-                    if ($sentenciaUpdateStock->execute()) {
-                        // Registrar movimiento de stock
-                        $consultaMovimiento = "INSERT INTO movimientos_stock 
-                            (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
-                            VALUES (:id_producto, :tipo, :cantidad, :cantidad_anterior, :cantidad_nueva, :motivo, :id_usuario)";
-                        $sentenciaMovimiento = $conexion->prepare($consultaMovimiento);
-                        $sentenciaMovimiento->bindParam(':id_producto', $idProducto, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':tipo', $tipoMovimiento);
-                        $sentenciaMovimiento->bindParam(':cantidad', $cantidad, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':cantidad_anterior', $stockActual, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':cantidad_nueva', $nuevoStock, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':motivo', $motivo);
-                        $sentenciaMovimiento->bindParam(':id_usuario', $idUsuario, PDO::PARAM_INT);
-                        $sentenciaMovimiento->execute();
-
-                        $mensaje = "Stock actualizado y movimiento registrado exitosamente.";
-                    } else {
-                        $error = "Error al actualizar el stock del producto.";
-                    }
-                }
-
-            } else {
-                $error = "Datos inválidos para el ajuste de stock.";
+            // VALIDACIÓN ADICIONAL - Verificar que el proveedor existe
+            $idProveedor = (int)($_POST['id_proveedor'] ?? 0);
+            
+            if ($idProveedor <= 0) {
+                throw new Exception("Error: No se ha seleccionado un proveedor válido. Valor recibido: " . ($_POST['id_proveedor'] ?? 'NULL') . ". ID después de conversión: " . $idProveedor);
+            }
+            
+            // Verificar que el proveedor existe en la base de datos
+            $consultaVerificarProveedor = "SELECT id FROM proveedores WHERE id = :id_proveedor";
+            $sentenciaVerificarProveedor = $conexion->prepare($consultaVerificarProveedor);
+            $sentenciaVerificarProveedor->bindParam(':id_proveedor', $idProveedor, PDO::PARAM_INT);
+            $sentenciaVerificarProveedor->execute();
+            
+            if ($sentenciaVerificarProveedor->rowCount() === 0) {
+                throw new Exception("Error: El proveedor seleccionado no existe en la base de datos. ID: " . $idProveedor);
             }
 
+            // INICIAR TRANSACCIÓN
+            $conexion->beginTransaction();
+            $transaccionActiva = true;
+
+            $fechaCompra = $_POST['fecha_compra'];
+            $formaPago = $_POST['forma_pago'];
+            $observaciones = $_POST['observaciones'] ?? '';
+            $totalCompra = 0;
+
+            // Subir imagen de factura si existe
+            $imagenFactura = null;
+            if (isset($_FILES['imagen_factura']) && $_FILES['imagen_factura']['error'] === UPLOAD_ERR_OK) {
+                // Crear directorio si no existe
+                if (!is_dir('assets/facturas')) {
+                    mkdir('assets/facturas', 0777, true);
+                }
+                
+                $nombreImagen = uniqid() . '_' . $_FILES['imagen_factura']['name'];
+                $rutaImagen = 'assets/facturas/' . $nombreImagen;
+                if (move_uploaded_file($_FILES['imagen_factura']['tmp_name'], $rutaImagen)) {
+                    $imagenFactura = $rutaImagen;
+                }
+            }
+
+            // Insertar cabecera de compra
+            $consultaCompra = "INSERT INTO compras (id_proveedor, fecha_compra, forma_pago, observaciones, total, imagen_factura, id_usuario) 
+                              VALUES (:id_proveedor, :fecha_compra, :forma_pago, :observaciones, 0, :imagen_factura, :id_usuario)";
+            $sentenciaCompra = $conexion->prepare($consultaCompra);
+            $sentenciaCompra->bindParam(':id_proveedor', $idProveedor);
+            $sentenciaCompra->bindParam(':fecha_compra', $fechaCompra);
+            $sentenciaCompra->bindParam(':forma_pago', $formaPago);
+            $sentenciaCompra->bindParam(':observaciones', $observaciones);
+            $sentenciaCompra->bindParam(':imagen_factura', $imagenFactura);
+            $sentenciaCompra->bindParam(':id_usuario', $idUsuario);
+            $sentenciaCompra->execute();
+            $idCompra = $conexion->lastInsertId();
+
+            // Procesar productos
+            $productos = $_POST['productos'] ?? [];
+            foreach ($productos as $producto) {
+                $idProducto = (int)$producto['id'];
+                $cantidad = (int)$producto['cantidad'];
+                $costoUnitario = (float)$producto['costo'];
+                $subtotal = $cantidad * $costoUnitario;
+                $totalCompra += $subtotal;
+
+                // Insertar detalle de compra
+                $consultaDetalle = "INSERT INTO compra_detalles (id_compra, id_producto, cantidad, costo_unitario, subtotal) 
+                                   VALUES (:id_compra, :id_producto, :cantidad, :costo_unitario, :subtotal)";
+                $sentenciaDetalle = $conexion->prepare($consultaDetalle);
+                $sentenciaDetalle->bindParam(':id_compra', $idCompra);
+                $sentenciaDetalle->bindParam(':id_producto', $idProducto);
+                $sentenciaDetalle->bindParam(':cantidad', $cantidad);
+                $sentenciaDetalle->bindParam(':costo_unitario', $costoUnitario);
+                $sentenciaDetalle->bindParam(':subtotal', $subtotal);
+                $sentenciaDetalle->execute();
+
+                // Actualizar stock y costo del producto
+                $consultaStock = "SELECT stock, costo FROM productos WHERE id = :id";
+                $sentenciaStock = $conexion->prepare($consultaStock);
+                $sentenciaStock->bindParam(':id', $idProducto);
+                $sentenciaStock->execute();
+                $productoActual = $sentenciaStock->fetch(PDO::FETCH_ASSOC);
+                
+                $stockAnterior = (int)$productoActual['stock'];
+                $nuevoStock = $stockAnterior + $cantidad;
+                
+                // Actualizar producto
+                $consultaUpdate = "UPDATE productos SET stock = :stock, costo = :costo WHERE id = :id";
+                $sentenciaUpdate = $conexion->prepare($consultaUpdate);
+                $sentenciaUpdate->bindParam(':stock', $nuevoStock);
+                $sentenciaUpdate->bindParam(':costo', $costoUnitario);
+                $sentenciaUpdate->bindParam(':id', $idProducto);
+                $sentenciaUpdate->execute();
+
+                // Registrar movimiento
+                $consultaMovimiento = "INSERT INTO movimientos_stock 
+                    (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
+                    VALUES (:id_producto, 'ENTRADA', :cantidad, :cantidad_anterior, :cantidad_nueva, 'COMPRA A PROVEEDOR', :id_usuario)";
+                $sentenciaMovimiento = $conexion->prepare($consultaMovimiento);
+                $sentenciaMovimiento->bindParam(':id_producto', $idProducto);
+                $sentenciaMovimiento->bindParam(':cantidad', $cantidad);
+                $sentenciaMovimiento->bindParam(':cantidad_anterior', $stockAnterior);
+                $sentenciaMovimiento->bindParam(':cantidad_nueva', $nuevoStock);
+                $sentenciaMovimiento->bindParam(':id_usuario', $idUsuario);
+                $sentenciaMovimiento->execute();
+            }
+
+            // Actualizar total de compra
+            $consultaUpdateTotal = "UPDATE compras SET total = :total WHERE id = :id";
+            $sentenciaUpdateTotal = $conexion->prepare($consultaUpdateTotal);
+            $sentenciaUpdateTotal->bindParam(':total', $totalCompra);
+            $sentenciaUpdateTotal->bindParam(':id', $idCompra);
+            $sentenciaUpdateTotal->execute();
+
+            $conexion->commit();
+            $transaccionActiva = false;
+            $mensaje = "Ingreso de mercadería registrado exitosamente. Total: $" . number_format($totalCompra, 2);
+
+        } catch (Exception $e) {
+            if ($transaccionActiva) {
+                $conexion->rollBack();
+            }
+            $error = $e->getMessage();
         } catch (PDOException $e) {
-            $error = "Error en ajuste de stock: " . $e->getMessage();
+            if ($transaccionActiva) {
+                $conexion->rollBack();
+            }
+            $error = "Error en ingreso masivo: " . $e->getMessage();
         }
     }
-    // --- FIN NUEVO BLOQUE ---
 
+    /* Procesar Egreso Masivo */
+    if (isset($_POST['procesar_egreso_masivo'])) {
+        $transaccionActiva = false;
+        try {
+            $conexion->beginTransaction();
+            $transaccionActiva = true;
+
+            $fechaEgreso = $_POST['fecha_egreso'];
+            $motivo = $_POST['motivo'];
+            $observaciones = $_POST['observaciones'] ?? '';
+
+            // Insertar cabecera de egreso
+            $consultaEgreso = "INSERT INTO egresos (fecha_egreso, motivo, observaciones, id_usuario) 
+                              VALUES (:fecha_egreso, :motivo, :observaciones, :id_usuario)";
+            $sentenciaEgreso = $conexion->prepare($consultaEgreso);
+            $sentenciaEgreso->bindParam(':fecha_egreso', $fechaEgreso);
+            $sentenciaEgreso->bindParam(':motivo', $motivo);
+            $sentenciaEgreso->bindParam(':observaciones', $observaciones);
+            $sentenciaEgreso->bindParam(':id_usuario', $idUsuario);
+            $sentenciaEgreso->execute();
+            $idEgreso = $conexion->lastInsertId();
+
+            // Procesar productos
+            $productos = $_POST['productos'] ?? [];
+            foreach ($productos as $producto) {
+                $idProducto = (int)$producto['id'];
+                $cantidad = (int)$producto['cantidad'];
+
+                // Verificar stock disponible
+                $consultaStock = "SELECT stock FROM productos WHERE id = :id";
+                $sentenciaStock = $conexion->prepare($consultaStock);
+                $sentenciaStock->bindParam(':id', $idProducto);
+                $sentenciaStock->execute();
+                $productoActual = $sentenciaStock->fetch(PDO::FETCH_ASSOC);
+                
+                $stockAnterior = (int)$productoActual['stock'];
+                
+                if ($stockAnterior < $cantidad) {
+                    throw new Exception("Stock insuficiente para el producto ID: $idProducto. Stock actual: $stockAnterior, solicitado: $cantidad");
+                }
+
+                $nuevoStock = $stockAnterior - $cantidad;
+
+                // Insertar detalle de egreso
+                $consultaDetalle = "INSERT INTO egreso_detalles (id_egreso, id_producto, cantidad) 
+                                   VALUES (:id_egreso, :id_producto, :cantidad)";
+                $sentenciaDetalle = $conexion->prepare($consultaDetalle);
+                $sentenciaDetalle->bindParam(':id_egreso', $idEgreso);
+                $sentenciaDetalle->bindParam(':id_producto', $idProducto);
+                $sentenciaDetalle->bindParam(':cantidad', $cantidad);
+                $sentenciaDetalle->execute();
+
+                // Actualizar stock
+                $consultaUpdate = "UPDATE productos SET stock = :stock WHERE id = :id";
+                $sentenciaUpdate = $conexion->prepare($consultaUpdate);
+                $sentenciaUpdate->bindParam(':stock', $nuevoStock);
+                $sentenciaUpdate->bindParam(':id', $idProducto);
+                $sentenciaUpdate->execute();
+
+                // Registrar movimiento
+                $consultaMovimiento = "INSERT INTO movimientos_stock 
+                    (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
+                    VALUES (:id_producto, 'SALIDA', :cantidad, :cantidad_anterior, :cantidad_nueva, :motivo, :id_usuario)";
+                $sentenciaMovimiento = $conexion->prepare($consultaMovimiento);
+                $sentenciaMovimiento->bindParam(':id_producto', $idProducto);
+                $sentenciaMovimiento->bindParam(':cantidad', $cantidad);
+                $sentenciaMovimiento->bindParam(':cantidad_anterior', $stockAnterior);
+                $sentenciaMovimiento->bindParam(':cantidad_nueva', $nuevoStock);
+                $sentenciaMovimiento->bindParam(':motivo', $motivo);
+                $sentenciaMovimiento->bindParam(':id_usuario', $idUsuario);
+                $sentenciaMovimiento->execute();
+            }
+
+            $conexion->commit();
+            $transaccionActiva = false;
+            $mensaje = "Egreso de mercadería registrado exitosamente.";
+
+        } catch (PDOException $e) {
+            if ($transaccionActiva) {
+                $conexion->rollBack();
+            }
+            $error = "Error en egreso masivo: " . $e->getMessage();
+        } catch (Exception $e) {
+            if ($transaccionActiva) {
+                $conexion->rollBack();
+            }
+            $error = $e->getMessage();
+        }
+    }
 }
 
-/* Ocultar/Mostrar producto (también sólo para administradores) */
+/* Ocultar/Mostrar producto - CON REDIRECCIÓN MEJORADA */
 if ($esAdministrador && isset($_GET['toggle']) && isset($_GET['id'])) {
-    // ... (sin cambios en este bloque)
     try {
         $id = (int)$_GET['id'];
         $consultaEstado = "SELECT oculto FROM productos WHERE id = :id";
@@ -231,12 +371,21 @@ if ($esAdministrador && isset($_GET['toggle']) && isset($_GET['id'])) {
         if ($sentenciaToggle->execute()) {
             $accion = $nuevoEstado ? "ocultado" : "mostrado";
             $mensaje = "Producto $accion exitosamente.";
+            
+            // Redirigir para refrescar la página y ver los cambios inmediatamente
+            header("Location: inventario.php?message=" . urlencode($mensaje));
+            exit();
         } else {
             $error = "Error al cambiar el estado del producto.";
         }
     } catch (PDOException $e) {
         $error = "Error: " . $e->getMessage();
     }
+}
+
+/* Obtener mensaje de URL si existe */
+if (isset($_GET['message'])) {
+    $mensaje = urldecode($_GET['message']);
 }
 
 /* Obtener lista de productos */
@@ -282,24 +431,14 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="assets/css/theme-oscuro.css">
 
-
     <script>
         (function() {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'light') {
-                // Aplica la clase al <html>
                 document.documentElement.classList.add('theme-light');
             }
         })();
     </script>
-
-    <style>
-        #theme-toggle-btn .icon-moon { display: none; }
-        #theme-toggle-btn .icon-sun { display: inline-block; }
-        html.theme-light #theme-toggle-btn .icon-moon { display: inline-block; }
-        html.theme-light #theme-toggle-btn .icon-sun { display: none; }
-    </style>
-    
 </head>
 <body>
     <?php include 'includes/navbar.php'; ?>
@@ -329,6 +468,14 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                 <div class="col-12">
                     <button class="btn btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#formularioProducto" aria-expanded="<?php echo isset($productoEditar) ? 'true' : 'false'; ?>" aria-controls="formularioProducto">
                         <i class="bi bi-plus-circle me-2"></i><?php echo isset($productoEditar) ? 'Editando Producto' : 'Agregar Nuevo Producto'; ?>
+                    </button>
+                    
+                    <!-- Botones principales - Solo Ingreso y Egreso Masivo -->
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalIngresoMasivo">
+                        <i class="bi bi-box-arrow-in-down me-2"></i>Ingreso de Mercadería
+                    </button>
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalEgresoMasivo">
+                        <i class="bi bi-box-arrow-up me-2"></i>Egreso de Mercadería
                     </button>
                 </div>
             </div>
@@ -409,10 +556,8 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                                             <label for="stock" class="form-label">Stock <?php echo isset($productoEditar) ? 'Actual' : 'Inicial'; ?></label>
                                             <input type="number" class="form-control" id="stock" name="stock"
                                                    value="<?php echo isset($productoEditar) ? (int)$productoEditar['stock'] : '0'; ?>" 
-                                                   required <?php echo isset($productoEditar) ? 'readonly' : ''; ?>>
-                                            <?php if (isset($productoEditar)): ?>
-                                                <div class="form-text">Use los botones (+) o (-) de la lista para ajustar el stock.</div>
-                                            <?php endif; ?>
+                                                   required readonly>
+                                            <div class="form-text">Use los botones de Ingreso/Egreso de Mercadería para ajustar el stock.</div>
                                         </div>
                                         <div class="mb-3">
                                             <label for="stock_minimo" class="form-label">Stock Mínimo</label>
@@ -497,31 +642,11 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                                                             <a href="inventario.php?editar=<?php echo (int)$producto['id']; ?>" class="btn btn-sm btn-primary btn-action" title="Editar">
                                                                 <i class="bi bi-pencil"></i>
                                                             </a>
-                                                            
-                                                            <button type="button" class="btn btn-sm btn-success btn-action btn-ajuste-stock" 
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#modalAjusteStock"
-                                                                data-bs-tipo="ENTRADA"
-                                                                data-bs-producto-id="<?php echo (int)$producto['id']; ?>"
-                                                                data-bs-producto-nombre="<?php echo htmlspecialchars($producto['nombre']); ?>"
-                                                                title="Registrar Ingreso">
-                                                                <i class="bi bi-plus-circle"></i>
-                                                            </button>
-
-                                                            <button type="button" class="btn btn-sm btn-danger btn-action btn-ajuste-stock" 
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#modalAjusteStock"
-                                                                data-bs-tipo="SALIDA"
-                                                                data-bs-producto-id="<?php echo (int)$producto['id']; ?>"
-                                                                data-bs-producto-nombre="<?php echo htmlspecialchars($producto['nombre']); ?>"
-                                                                title="Registrar Egreso">
-                                                                <i class="bi bi-dash-circle"></i>
-                                                            </button>
 
                                                             <a href="inventario.php?toggle=1&id=<?php echo (int)$producto['id']; ?>" class="btn btn-sm btn-warning btn-action" title="<?php echo ((int)$producto['oculto'] === 1) ? 'Mostrar' : 'Ocultar'; ?>">
                                                                 <i class="bi bi-eye<?php echo ((int)$producto['oculto'] === 1) ? '' : '-slash'; ?>"></i>
                                                             </a>
-                                                            </td>
+                                                        </td>
                                                     <?php endif; ?>
                                                 </tr>
                                             <?php endforeach; ?>
@@ -538,41 +663,202 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
         </div>
     </div>
 
-    <div class="modal fade" id="modalAjusteStock" tabindex="-1" aria-labelledby="modalAjusteStockLabel" aria-hidden="true">
-        <div class="modal-dialog">
+    <!-- Modal Ingreso Masivo - VERSIÓN CON BUSCADORES -->
+    <div class="modal fade" id="modalIngresoMasivo" tabindex="-1" aria-labelledby="modalIngresoMasivoLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
-                <form method="post" action="inventario.php">
+                <form method="post" action="inventario.php" enctype="multipart/form-data" id="formIngresoMasivo">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="modalAjusteStockLabel">Ajuste de Stock</h5>
+                        <h5 class="modal-title" id="modalIngresoMasivoLabel">Ingreso Masivo de Mercadería</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <input type="hidden" name="id_producto" id="modal_id_producto">
-                        <input type="hidden" name="tipo_ajuste" id="modal_tipo_ajuste">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="id_proveedor_ingreso" class="form-label">Proveedor *</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="buscador_proveedor" 
+                                               placeholder="Buscar proveedor por nombre o ID..." 
+                                               autocomplete="off">
+                                        <input type="hidden" id="id_proveedor_ingreso" name="id_proveedor">
+                                        <button class="btn btn-outline-secondary" type="button" id="btn_limpiar_proveedor">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-text" id="proveedor_info"></div>
+                                    <div class="dropdown">
+                                        <div class="dropdown-menu w-100" id="dropdown_proveedores" 
+                                             style="max-height: 200px; overflow-y: auto;">
+                                            <!-- Los resultados de búsqueda aparecerán aquí -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="fecha_compra" class="form-label">Fecha de Compra *</label>
+                                    <input type="date" class="form-control" id="fecha_compra" name="fecha_compra" required value="<?php echo date('Y-m-d'); ?>">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="forma_pago" class="form-label">Forma de Pago *</label>
+                                    <select class="form-select" id="forma_pago" name="forma_pago" required>
+                                        <option value="">Seleccionar forma de pago</option>
+                                        <option value="EFECTIVO">Efectivo</option>
+                                        <option value="TARJETA">Tarjeta</option>
+                                        <option value="TRANSFERENCIA">Transferencia</option>
+                                        <option value="CHEQUE">Cheque</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="imagen_factura" class="form-label">Factura/Ticket (QR)</label>
+                                    <input type="file" class="form-control" id="imagen_factura" name="imagen_factura" accept="image/*">
+                                    <div class="form-text">Puede escanear el código QR de la factura</div>
+                                </div>
+                            </div>
+                        </div>
                         
                         <div class="mb-3">
-                            <label class="form-label">Producto</label>
-                            <input type="text" class="form-control" id="modal_nombre_producto" disabled>
+                            <label for="observaciones" class="form-label">Observaciones</label>
+                            <textarea class="form-control" id="observaciones" name="observaciones" rows="2" placeholder="Ej: Compra mensual, pedido especial, etc."></textarea>
                         </div>
-
+                        
+                        <hr>
+                        <h6>Productos</h6>
                         <div class="mb-3">
-                            <label for="modal_cantidad" class="form-label">Cantidad</label>
-                            <input type="number" class="form-control" id="modal_cantidad" name="cantidad" min="1" required>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="buscador_producto" 
+                                       placeholder="Buscar producto por nombre..." 
+                                       autocomplete="off" disabled>
+                                <button class="btn btn-outline-secondary" type="button" id="btn_limpiar_producto" disabled>
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                            <div class="dropdown">
+                                <div class="dropdown-menu w-100" id="dropdown_productos" 
+                                     style="max-height: 200px; overflow-y: auto;">
+                                    <!-- Los resultados de búsqueda aparecerán aquí -->
+                                </div>
+                            </div>
                         </div>
-
-                        <div class="mb-3">
-                            <label for="modal_motivo" class="form-label">Motivo</label>
-                            <input type="text" class="form-control" id="modal_motivo" name="motivo" placeholder="Ej: Compra a proveedor, Devolución, etc." required>
+                        
+                        <div id="productos-ingreso-container">
+                            <div class="producto-seleccionado mb-2 p-2 border rounded d-none" id="producto_base">
+                                <div class="row align-items-center">
+                                    <div class="col-md-5">
+                                        <strong id="producto_nombre">Nombre del producto</strong>
+                                        <input type="hidden" name="productos[0][id]" id="producto_id">
+                                        <div class="form-text">
+                                            Stock actual: <span id="producto_stock">0</span> | 
+                                            Stock mínimo: <span id="producto_stock_minimo">0</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number" class="form-control" name="productos[0][cantidad]" 
+                                               min="1" required placeholder="Cantidad">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number" step="0.01" class="form-control" name="productos[0][costo]" 
+                                               required placeholder="Costo unitario">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <button type="button" class="btn btn-sm btn-danger btn-eliminar-producto">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                        
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="btn-agregar-otro-producto" disabled>
+                            <i class="bi bi-plus-circle me-1"></i>Agregar Otro Producto
+                        </button>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" name="ajustar_stock" class="btn btn-primary" id="modal_btn_submit">Registrar</button>
+                        <button type="submit" name="procesar_ingreso_masivo" class="btn btn-primary" id="btn-submit-ingreso" disabled>Registrar Ingreso</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
+
+    <!-- Modal Egreso Masivo -->
+    <div class="modal fade" id="modalEgresoMasivo" tabindex="-1" aria-labelledby="modalEgresoMasivoLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form method="post" action="inventario.php">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalEgresoMasivoLabel">Egreso Masivo de Mercadería</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="fecha_egreso" class="form-label">Fecha de Egreso</label>
+                                    <input type="date" class="form-control" id="fecha_egreso" name="fecha_egreso" required value="<?php echo date('Y-m-d'); ?>">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="motivo" class="form-label">Motivo</label>
+                                    <input type="text" class="form-control" id="motivo" name="motivo" required placeholder="Ej: Rotura, merma, devolución">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="observaciones_egreso" class="form-label">Observaciones</label>
+                            <textarea class="form-control" id="observaciones_egreso" name="observaciones" rows="2" placeholder="Ej: Detalles adicionales sobre el egreso"></textarea>
+                        </div>
+                        
+                        <hr>
+                        <h6>Productos</h6>
+                        <div id="productos-egreso-container">
+                            <div class="row producto-egreso mb-2">
+                                <div class="col-md-8">
+                                    <select class="form-select producto-select" name="productos[0][id]" required>
+                                        <option value="">Seleccionar producto</option>
+                                        <?php foreach ($productos as $producto): ?>
+                                            <option value="<?php echo (int)$producto['id']; ?>">
+                                                <?php echo htmlspecialchars($producto['nombre']); ?> 
+                                                (Stock: <?php echo (int)$producto['stock']; ?>)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" class="form-control" name="productos[0][cantidad]" min="1" required placeholder="Cantidad">
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="button" class="btn btn-sm btn-danger btn-eliminar-producto" disabled>
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="btn-agregar-producto-egreso">
+                            <i class="bi bi-plus-circle me-1"></i>Agregar Producto
+                        </button>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" name="procesar_egreso_masivo" class="btn btn-primary">Registrar Egreso</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -580,7 +866,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             const porcentajeInput = document.getElementById('porcentaje_ganancia');
             const precioInput = document.getElementById('precio');
 
-            // --- Cálculo de Precio (Sin cambios) ---
+            // --- Cálculo de Precio ---
             function calcularPrecio() {
                 if (costoInput && porcentajeInput && precioInput) {
                     const costo = parseFloat(costoInput.value) || 0;
@@ -593,8 +879,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             if (porcentajeInput) porcentajeInput.addEventListener('input', calcularPrecio);
             calcularPrecio();
 
-
-            // --- NUEVO SCRIPT: Buscador de Productos ---
+            // --- Buscador de Productos en la tabla principal ---
             const buscador = document.getElementById('buscadorProductos');
             const tabla = document.getElementById('tablaProductos');
             const filas = tabla ? tabla.getElementsByTagName('tbody')[0].getElementsByTagName('tr') : [];
@@ -606,7 +891,6 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                     for (let i = 0; i < filas.length; i++) {
                         const fila = filas[i];
                         const celdas = fila.getElementsByTagName('td');
-                        // Busca en Nombre (0), Categoría (1) y Proveedor (2)
                         const textoFila = (celdas[0].textContent + ' ' + celdas[1].textContent + ' ' + celdas[2].textContent).toLowerCase();
                         
                         if (textoFila.indexOf(textoBusqueda) > -1) {
@@ -618,47 +902,406 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                 });
             }
 
-            // --- NUEVO SCRIPT: Lógica del Modal de Ajuste de Stock ---
-            const modalAjusteStock = document.getElementById('modalAjusteStock');
-            if (modalAjusteStock) {
-                modalAjusteStock.addEventListener('show.bs.modal', function (event) {
-                    // Botón que disparó el modal
-                    const button = event.relatedTarget;
+            // --- GESTIÓN DEL MODAL INGRESO MASIVO CON BUSCADORES ---
+            const proveedores = <?php echo json_encode($proveedores); ?>;
+            const productos = <?php echo json_encode($productos); ?>;
+            let productosFiltrados = [];
+            let productosSeleccionados = [];
+            let contadorIngreso = 0;
+
+            // Buscador de Proveedores
+            const buscadorProveedor = document.getElementById('buscador_proveedor');
+            const dropdownProveedores = document.getElementById('dropdown_proveedores');
+            const idProveedorInput = document.getElementById('id_proveedor_ingreso');
+            const btnLimpiarProveedor = document.getElementById('btn_limpiar_proveedor');
+            const proveedorInfo = document.getElementById('proveedor_info');
+
+            // Buscador de Productos
+            const buscadorProducto = document.getElementById('buscador_producto');
+            const dropdownProductos = document.getElementById('dropdown_productos');
+            const btnLimpiarProducto = document.getElementById('btn_limpiar_producto');
+            const productosContainer = document.getElementById('productos-ingreso-container');
+            const btnAgregarOtroProducto = document.getElementById('btn-agregar-otro-producto');
+            const btnSubmitIngreso = document.getElementById('btn-submit-ingreso');
+
+            // Buscar proveedores
+            if (buscadorProveedor) {
+                buscadorProveedor.addEventListener('input', function() {
+                    const texto = this.value.toLowerCase().trim();
+                    dropdownProveedores.innerHTML = '';
                     
-                    // Extraer datos de los atributos data-bs-*
-                    const tipo = button.getAttribute('data-bs-tipo');
-                    const productoId = button.getAttribute('data-bs-producto-id');
-                    const productoNombre = button.getAttribute('data-bs-producto-nombre');
-
-                    // Obtener elementos del modal
-                    const modalTitle = modalAjusteStock.querySelector('.modal-title');
-                    const modalSubmitBtn = modalAjusteStock.querySelector('#modal_btn_submit');
-                    const modalIdInput = modalAjusteStock.querySelector('#modal_id_producto');
-                    const modalTipoInput = modalAjusteStock.querySelector('#modal_tipo_ajuste');
-                    const modalNombreInput = modalAjusteStock.querySelector('#modal_nombre_producto');
-                    const modalMotivoInput = modalAjusteStock.querySelector('#modal_motivo');
-
-                    // Configurar el modal según sea ENTRADA o SALIDA
-                    if (tipo === 'ENTRADA') {
-                        modalTitle.textContent = 'Registrar Ingreso de Stock';
-                        modalSubmitBtn.textContent = 'Registrar Ingreso';
-                        modalSubmitBtn.classList.remove('btn-danger');
-                        modalSubmitBtn.classList.add('btn-success');
-                        modalMotivoInput.placeholder = 'Ej: Compra a proveedor, devolución cliente...';
-                    } else {
-                        modalTitle.textContent = 'Registrar Egreso de Stock';
-                        modalSubmitBtn.textContent = 'Registrar Egreso';
-                        modalSubmitBtn.classList.remove('btn-success');
-                        modalSubmitBtn.classList.add('btn-danger');
-                        modalMotivoInput.placeholder = 'Ej: Rotura, merma, devolución a proveedor...';
+                    if (texto.length < 2) {
+                        dropdownProveedores.classList.remove('show');
+                        return;
                     }
-
-                    // Rellenar los campos del formulario
-                    modalIdInput.value = productoId;
-                    modalTipoInput.value = tipo;
-                    modalNombreInput.value = productoNombre;
+                    
+                    const resultados = proveedores.filter(proveedor => 
+                        proveedor.empresa.toLowerCase().includes(texto) || 
+                        proveedor.id.toString().includes(texto)
+                    );
+                    
+                    if (resultados.length > 0) {
+                        resultados.forEach(proveedor => {
+                            const item = document.createElement('button');
+                            item.type = 'button';
+                            item.className = 'dropdown-item';
+                            item.innerHTML = `
+                                <strong>${proveedor.empresa}</strong> 
+                                <small class="text-muted">(ID: ${proveedor.id})</small><br>
+                                <small class="text-muted">${proveedor.contacto || ''} - ${proveedor.telefono || ''}</small>
+                            `;
+                            item.addEventListener('click', function() {
+                                seleccionarProveedor(proveedor);
+                            });
+                            dropdownProveedores.appendChild(item);
+                        });
+                        dropdownProveedores.classList.add('show');
+                    } else {
+                        const item = document.createElement('div');
+                        item.className = 'dropdown-item text-muted';
+                        item.textContent = 'No se encontraron proveedores';
+                        dropdownProveedores.appendChild(item);
+                        dropdownProveedores.classList.add('show');
+                    }
+                });
+                
+                // Cerrar dropdown al hacer clic fuera
+                document.addEventListener('click', function(e) {
+                    if (!buscadorProveedor.contains(e.target) && !dropdownProveedores.contains(e.target)) {
+                        dropdownProveedores.classList.remove('show');
+                    }
                 });
             }
+
+            // Seleccionar proveedor
+            function seleccionarProveedor(proveedor) {
+                idProveedorInput.value = proveedor.id;
+                buscadorProveedor.value = `${proveedor.empresa} (ID: ${proveedor.id})`;
+                dropdownProveedores.classList.remove('show');
+                proveedorInfo.innerHTML = `
+                    <span class="text-success">
+                        <strong>${proveedor.empresa}</strong> seleccionado<br>
+                        <small>Contacto: ${proveedor.contacto || 'N/A'} | Tel: ${proveedor.telefono || 'N/A'}</small>
+                    </span>
+                `;
+                
+                // Habilitar buscador de productos
+                buscadorProducto.disabled = false;
+                btnLimpiarProducto.disabled = false;
+                
+                // Filtrar productos del proveedor seleccionado
+                productosFiltrados = productos.filter(producto => 
+                    parseInt(producto.id_proveedor) === parseInt(proveedor.id)
+                );
+                
+                validarFormularioIngreso();
+            }
+
+            // Limpiar proveedor
+            btnLimpiarProveedor.addEventListener('click', function() {
+                idProveedorInput.value = '';
+                buscadorProveedor.value = '';
+                proveedorInfo.innerHTML = '';
+                buscadorProducto.disabled = true;
+                btnLimpiarProducto.disabled = true;
+                buscadorProducto.value = '';
+                dropdownProductos.classList.remove('show');
+                
+                // Limpiar productos seleccionados
+                productosSeleccionados = [];
+                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach(el => el.remove());
+                contadorIngreso = 0;
+                
+                validarFormularioIngreso();
+            });
+
+            // Buscar productos
+            if (buscadorProducto) {
+                buscadorProducto.addEventListener('input', function() {
+                    const texto = this.value.toLowerCase().trim();
+                    dropdownProductos.innerHTML = '';
+                    
+                    if (texto.length < 2 || productosFiltrados.length === 0) {
+                        dropdownProductos.classList.remove('show');
+                        return;
+                    }
+                    
+                    const resultados = productosFiltrados.filter(producto => 
+                        producto.nombre.toLowerCase().includes(texto) &&
+                        !productosSeleccionados.some(p => p.id === producto.id)
+                    );
+                    
+                    if (resultados.length > 0) {
+                        resultados.forEach(producto => {
+                            const item = document.createElement('button');
+                            item.type = 'button';
+                            item.className = 'dropdown-item';
+                            item.innerHTML = `
+                                <strong>${producto.nombre}</strong><br>
+                                <small class="text-muted">
+                                    Stock: ${producto.stock} | Mín: ${producto.stock_minimo} | 
+                                    Categoría: ${producto.categoria}
+                                </small>
+                            `;
+                            item.addEventListener('click', function() {
+                                seleccionarProducto(producto);
+                            });
+                            dropdownProductos.appendChild(item);
+                        });
+                        dropdownProductos.classList.add('show');
+                    } else {
+                        const item = document.createElement('div');
+                        item.className = 'dropdown-item text-muted';
+                        item.textContent = 'No se encontraron productos o ya están seleccionados';
+                        dropdownProductos.appendChild(item);
+                        dropdownProductos.classList.add('show');
+                    }
+                });
+                
+                // Cerrar dropdown al hacer clic fuera
+                document.addEventListener('click', function(e) {
+                    if (!buscadorProducto.contains(e.target) && !dropdownProductos.contains(e.target)) {
+                        dropdownProductos.classList.remove('show');
+                    }
+                });
+            }
+
+            // Limpiar producto
+            btnLimpiarProducto.addEventListener('click', function() {
+                buscadorProducto.value = '';
+                dropdownProductos.classList.remove('show');
+            });
+
+            // Seleccionar producto
+            function seleccionarProducto(producto) {
+                buscadorProducto.value = '';
+                dropdownProductos.classList.remove('show');
+                
+                // Agregar producto a la lista
+                agregarProductoALista(producto);
+                
+                // Habilitar botón para agregar otro producto
+                btnAgregarOtroProducto.disabled = false;
+                
+                validarFormularioIngreso();
+            }
+
+            // Agregar producto a la lista visual
+            function agregarProductoALista(producto) {
+                const productoBase = document.getElementById('producto_base');
+                const nuevoProducto = productoBase.cloneNode(true);
+                
+                nuevoProducto.id = `producto_${producto.id}`;
+                nuevoProducto.classList.remove('d-none');
+                
+                // Actualizar información del producto
+                nuevoProducto.querySelector('#producto_nombre').textContent = producto.nombre;
+                nuevoProducto.querySelector('#producto_id').value = producto.id;
+                nuevoProducto.querySelector('#producto_id').name = `productos[${contadorIngreso}][id]`;
+                nuevoProducto.querySelector('#producto_stock').textContent = producto.stock;
+                nuevoProducto.querySelector('#producto_stock_minimo').textContent = producto.stock_minimo;
+                
+                // Actualizar nombres de inputs
+                const cantidadInput = nuevoProducto.querySelector('input[name="productos[0][cantidad]"]');
+                const costoInput = nuevoProducto.querySelector('input[name="productos[0][costo]"]');
+                
+                cantidadInput.name = `productos[${contadorIngreso}][cantidad]`;
+                costoInput.name = `productos[${contadorIngreso}][costo]`;
+                
+                // Agregar event listeners para validación
+                cantidadInput.addEventListener('input', validarFormularioIngreso);
+                costoInput.addEventListener('input', validarFormularioIngreso);
+                
+                // Configurar botón eliminar
+                const btnEliminar = nuevoProducto.querySelector('.btn-eliminar-producto');
+                btnEliminar.addEventListener('click', function() {
+                    eliminarProductoDeLista(producto.id, nuevoProducto);
+                });
+                
+                productosContainer.appendChild(nuevoProducto);
+                productosSeleccionados.push({
+                    id: producto.id,
+                    nombre: producto.nombre,
+                    elemento: nuevoProducto
+                });
+                
+                contadorIngreso++;
+            }
+
+            // Eliminar producto de la lista
+            function eliminarProductoDeLista(productoId, elemento) {
+                productosSeleccionados = productosSeleccionados.filter(p => p.id !== productoId);
+                elemento.remove();
+                
+                // Reindexar productos
+                contadorIngreso = 0;
+                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach((el, index) => {
+                    const inputs = el.querySelectorAll('input');
+                    inputs[0].name = `productos[${index}][id]`;
+                    inputs[1].name = `productos[${index}][cantidad]`;
+                    inputs[2].name = `productos[${index}][costo]`;
+                    contadorIngreso++;
+                });
+                
+                // Deshabilitar botón si no hay productos
+                if (productosSeleccionados.length === 0) {
+                    btnAgregarOtroProducto.disabled = true;
+                }
+                
+                validarFormularioIngreso();
+            }
+
+            // Agregar otro producto
+            btnAgregarOtroProducto.addEventListener('click', function() {
+                buscadorProducto.focus();
+            });
+
+            // Validar formulario
+            function validarFormularioIngreso() {
+                const idProveedor = idProveedorInput.value;
+                const formaPago = document.getElementById('forma_pago').value;
+                const productosCompletos = productosSeleccionados.length > 0;
+                
+                let productosValidos = true;
+                
+                // Verificar que todos los productos tengan cantidad y costo válidos
+                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach(productoEl => {
+                    const cantidad = productoEl.querySelector('input[name$="[cantidad]"]').value;
+                    const costo = productoEl.querySelector('input[name$="[costo]"]').value;
+                    
+                    if (!cantidad || parseInt(cantidad) <= 0 || !costo || parseFloat(costo) <= 0) {
+                        productosValidos = false;
+                    }
+                });
+                
+                const formularioValido = idProveedor && formaPago && productosCompletos && productosValidos;
+                btnSubmitIngreso.disabled = !formularioValido;
+                
+                return formularioValido;
+            }
+
+            // Validación en tiempo real
+            document.addEventListener('input', function(e) {
+                if (e.target.matches('#forma_pago, input[name$="[cantidad]"], input[name$="[costo]"]')) {
+                    validarFormularioIngreso();
+                }
+            });
+
+            // Prevenir envío si no es válido
+            document.getElementById('formIngresoMasivo').addEventListener('submit', function(e) {
+                if (!validarFormularioIngreso()) {
+                    e.preventDefault();
+                    alert('Por favor complete todos los campos requeridos correctamente.');
+                }
+            });
+
+            // Limpiar modal al cerrar
+            document.getElementById('modalIngresoMasivo').addEventListener('hidden.bs.modal', function() {
+                // Limpiar proveedor
+                idProveedorInput.value = '';
+                buscadorProveedor.value = '';
+                proveedorInfo.innerHTML = '';
+                
+                // Limpiar productos
+                buscadorProducto.disabled = true;
+                btnLimpiarProducto.disabled = true;
+                buscadorProducto.value = '';
+                productosSeleccionados = [];
+                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach(el => el.remove());
+                contadorIngreso = 0;
+                
+                // Limpiar otros campos
+                document.getElementById('forma_pago').value = '';
+                document.getElementById('observaciones').value = '';
+                
+                // Deshabilitar botones
+                btnAgregarOtroProducto.disabled = true;
+                btnSubmitIngreso.disabled = true;
+            });
+
+            // --- Script para manejar el modal de egreso masivo ---
+            let contadorEgreso = 1;
+
+            // Agregar producto al egreso
+            document.getElementById('btn-agregar-producto-egreso').addEventListener('click', function() {
+                const container = document.getElementById('productos-egreso-container');
+                const nuevoProducto = document.createElement('div');
+                nuevoProducto.className = 'row producto-egreso mb-2';
+                nuevoProducto.innerHTML = `
+                    <div class="col-md-8">
+                        <select class="form-select producto-select" name="productos[${contadorEgreso}][id]" required>
+                            <option value="">Seleccionar producto</option>
+                            <?php foreach ($productos as $producto): ?>
+                                <option value="<?php echo (int)$producto['id']; ?>">
+                                    <?php echo htmlspecialchars($producto['nombre']); ?> 
+                                    (Stock: <?php echo (int)$producto['stock']; ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="number" class="form-control" name="productos[${contadorEgreso}][cantidad]" min="1" required placeholder="Cantidad">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-sm btn-danger btn-eliminar-producto">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(nuevoProducto);
+                contadorEgreso++;
+                
+                actualizarBotonesEliminarEgreso();
+            });
+
+            // Eliminar producto en egreso
+            function actualizarBotonesEliminarEgreso() {
+                document.querySelectorAll('#productos-egreso-container .btn-eliminar-producto').forEach((btn, index) => {
+                    const isFirst = index === 0;
+                    if (!isFirst) {
+                        btn.disabled = false;
+                        btn.onclick = function() {
+                            this.closest('.producto-egreso').remove();
+                            reindexarProductosEgreso();
+                        };
+                    }
+                });
+            }
+
+            function reindexarProductosEgreso() {
+                document.querySelectorAll('#productos-egreso-container .producto-egreso').forEach((fila, index) => {
+                    const selectInput = fila.querySelector('select');
+                    const cantidadInput = fila.querySelector('input[type="number"]');
+                    
+                    if (selectInput) selectInput.name = `productos[${index}][id]`;
+                    if (cantidadInput) cantidadInput.name = `productos[${index}][cantidad]`;
+                });
+               
+                contadorEgreso = document.querySelectorAll('#productos-egreso-container .producto-egreso').length;
+            }
+
+            // Validar stock en egresos
+            document.addEventListener('change', function(e) {
+                if (e.target.closest('#productos-egreso-container') && e.target.type === 'number') {
+                    const cantidad = parseInt(e.target.value);
+                    const productoSelect = e.target.closest('.row').querySelector('select');
+                    const stockText = productoSelect.options[productoSelect.selectedIndex]?.text;
+                    const stockMatch = stockText.match(/Stock: (\d+)/);
+                    
+                    if (stockMatch && cantidad > parseInt(stockMatch[1])) {
+                        alert('La cantidad ingresada supera el stock disponible');
+                        e.target.value = '';
+                    }
+                }
+            });
+
+            // Limpiar modal egreso al cerrar
+            document.getElementById('modalEgresoMasivo').addEventListener('hidden.bs.modal', function() {
+                // Mantener solo el primer producto en egreso
+                document.querySelectorAll('#productos-egreso-container .producto-egreso:not(:first-child)').forEach(el => el.remove());
+                contadorEgreso = 1;
+                actualizarBotonesEliminarEgreso();
+            });
 
         });
     </script>
