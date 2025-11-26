@@ -1,3 +1,5 @@
+[file name]: inventario.php
+[file content begin]
 <?php
 // inventario.php
 session_start();
@@ -663,7 +665,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
         </div>
     </div>
 
-    <!-- Modal Ingreso Masivo - VERSIÓN CON BUSCADORES -->
+    <!-- Modal Ingreso Masivo - VERSIÓN SIMPLIFICADA Y FUNCIONAL -->
     <div class="modal fade" id="modalIngresoMasivo" tabindex="-1" aria-labelledby="modalIngresoMasivoLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -677,22 +679,15 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="id_proveedor_ingreso" class="form-label">Proveedor *</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="buscador_proveedor" 
-                                               placeholder="Buscar proveedor por nombre o ID..." 
-                                               autocomplete="off">
-                                        <input type="hidden" id="id_proveedor_ingreso" name="id_proveedor">
-                                        <button class="btn btn-outline-secondary" type="button" id="btn_limpiar_proveedor">
-                                            <i class="bi bi-x-circle"></i>
-                                        </button>
-                                    </div>
+                                    <select class="form-select" id="id_proveedor_ingreso" name="id_proveedor" required>
+                                        <option value="">Seleccionar proveedor</option>
+                                        <?php foreach ($proveedores as $proveedor): ?>
+                                            <option value="<?php echo (int)$proveedor['id']; ?>">
+                                                <?php echo htmlspecialchars($proveedor['empresa'] . ' (ID: ' . $proveedor['id'] . ')'); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
                                     <div class="form-text" id="proveedor_info"></div>
-                                    <div class="dropdown">
-                                        <div class="dropdown-menu w-100" id="dropdown_proveedores" 
-                                             style="max-height: 200px; overflow-y: auto;">
-                                            <!-- Los resultados de búsqueda aparecerán aquí -->
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -732,53 +727,29 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                         
                         <hr>
                         <h6>Productos</h6>
-                        <div class="mb-3">
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="buscador_producto" 
-                                       placeholder="Buscar producto por nombre..." 
-                                       autocomplete="off" disabled>
-                                <button class="btn btn-outline-secondary" type="button" id="btn_limpiar_producto" disabled>
-                                    <i class="bi bi-x-circle"></i>
-                                </button>
-                            </div>
-                            <div class="dropdown">
-                                <div class="dropdown-menu w-100" id="dropdown_productos" 
-                                     style="max-height: 200px; overflow-y: auto;">
-                                    <!-- Los resultados de búsqueda aparecerán aquí -->
-                                </div>
-                            </div>
-                        </div>
-                        
                         <div id="productos-ingreso-container">
-                            <div class="producto-seleccionado mb-2 p-2 border rounded d-none" id="producto_base">
-                                <div class="row align-items-center">
-                                    <div class="col-md-5">
-                                        <strong id="producto_nombre">Nombre del producto</strong>
-                                        <input type="hidden" name="productos[0][id]" id="producto_id">
-                                        <div class="form-text">
-                                            Stock actual: <span id="producto_stock">0</span> | 
-                                            Stock mínimo: <span id="producto_stock_minimo">0</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <input type="number" class="form-control" name="productos[0][cantidad]" 
-                                               min="1" required placeholder="Cantidad">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <input type="number" step="0.01" class="form-control" name="productos[0][costo]" 
-                                               required placeholder="Costo unitario">
-                                    </div>
-                                    <div class="col-md-1">
-                                        <button type="button" class="btn btn-sm btn-danger btn-eliminar-producto">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </div>
+                            <div class="row producto-ingreso mb-2">
+                                <div class="col-md-5">
+                                    <select class="form-select producto-select" name="productos[0][id]" required disabled>
+                                        <option value="">Primero seleccione un proveedor</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" class="form-control" name="productos[0][cantidad]" min="1" required placeholder="Cantidad" disabled>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="number" step="0.01" class="form-control" name="productos[0][costo]" required placeholder="Costo unitario" disabled>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="button" class="btn btn-sm btn-danger btn-eliminar-producto" disabled>
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                         
-                        <button type="button" class="btn btn-sm btn-success mt-2" id="btn-agregar-otro-producto" disabled>
-                            <i class="bi bi-plus-circle me-1"></i>Agregar Otro Producto
+                        <button type="button" class="btn btn-sm btn-success mt-2" id="btn-agregar-producto-ingreso" disabled>
+                            <i class="bi bi-plus-circle me-1"></i>Agregar Producto
                         </button>
                     </div>
                     <div class="modal-footer">
@@ -902,287 +873,205 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                 });
             }
 
-            // --- GESTIÓN DEL MODAL INGRESO MASIVO CON BUSCADORES ---
-            const proveedores = <?php echo json_encode($proveedores); ?>;
-            const productos = <?php echo json_encode($productos); ?>;
-            let productosFiltrados = [];
-            let productosSeleccionados = [];
-            let contadorIngreso = 0;
-
-            // Buscador de Proveedores
-            const buscadorProveedor = document.getElementById('buscador_proveedor');
-            const dropdownProveedores = document.getElementById('dropdown_proveedores');
-            const idProveedorInput = document.getElementById('id_proveedor_ingreso');
-            const btnLimpiarProveedor = document.getElementById('btn_limpiar_proveedor');
-            const proveedorInfo = document.getElementById('proveedor_info');
-
-            // Buscador de Productos
-            const buscadorProducto = document.getElementById('buscador_producto');
-            const dropdownProductos = document.getElementById('dropdown_productos');
-            const btnLimpiarProducto = document.getElementById('btn_limpiar_producto');
-            const productosContainer = document.getElementById('productos-ingreso-container');
-            const btnAgregarOtroProducto = document.getElementById('btn-agregar-otro-producto');
+            // --- GESTIÓN DEL MODAL INGRESO MASIVO - VERSIÓN SIMPLIFICADA ---
+            const proveedorSelect = document.getElementById('id_proveedor_ingreso');
+            const btnAgregarProducto = document.getElementById('btn-agregar-producto-ingreso');
             const btnSubmitIngreso = document.getElementById('btn-submit-ingreso');
 
-            // Buscar proveedores
-            if (buscadorProveedor) {
-                buscadorProveedor.addEventListener('input', function() {
-                    const texto = this.value.toLowerCase().trim();
-                    dropdownProveedores.innerHTML = '';
+            let contadorIngreso = 1;
+
+            // Evento change del proveedor
+            if (proveedorSelect) {
+                proveedorSelect.addEventListener('change', function() {
+                    const idProveedor = this.value;
                     
-                    if (texto.length < 2) {
-                        dropdownProveedores.classList.remove('show');
-                        return;
-                    }
-                    
-                    const resultados = proveedores.filter(proveedor => 
-                        proveedor.empresa.toLowerCase().includes(texto) || 
-                        proveedor.id.toString().includes(texto)
-                    );
-                    
-                    if (resultados.length > 0) {
-                        resultados.forEach(proveedor => {
-                            const item = document.createElement('button');
-                            item.type = 'button';
-                            item.className = 'dropdown-item';
-                            item.innerHTML = `
-                                <strong>${proveedor.empresa}</strong> 
-                                <small class="text-muted">(ID: ${proveedor.id})</small><br>
-                                <small class="text-muted">${proveedor.contacto || ''} - ${proveedor.telefono || ''}</small>
-                            `;
-                            item.addEventListener('click', function() {
-                                seleccionarProveedor(proveedor);
-                            });
-                            dropdownProveedores.appendChild(item);
-                        });
-                        dropdownProveedores.classList.add('show');
+                    if (idProveedor) {
+                        // Habilitar campos de productos
+                        habilitarCamposProductos();
+                        
+                        // Cargar productos del proveedor seleccionado
+                        cargarProductosDelProveedor(idProveedor);
+                        
+                        // Habilitar botón de agregar producto
+                        btnAgregarProducto.disabled = false;
+                        
+                        // Actualizar información del proveedor
+                        document.getElementById('proveedor_info').innerHTML = 
+                            `<span class="text-success">Proveedor ID ${idProveedor} seleccionado</span>`;
+                            
+                        // Validar formulario
+                        validarFormularioIngreso();
                     } else {
-                        const item = document.createElement('div');
-                        item.className = 'dropdown-item text-muted';
-                        item.textContent = 'No se encontraron proveedores';
-                        dropdownProveedores.appendChild(item);
-                        dropdownProveedores.classList.add('show');
-                    }
-                });
-                
-                // Cerrar dropdown al hacer clic fuera
-                document.addEventListener('click', function(e) {
-                    if (!buscadorProveedor.contains(e.target) && !dropdownProveedores.contains(e.target)) {
-                        dropdownProveedores.classList.remove('show');
+                        // Deshabilitar todo si no hay proveedor
+                        deshabilitarCamposProductos();
+                        btnAgregarProducto.disabled = true;
+                        btnSubmitIngreso.disabled = true;
+                        document.getElementById('proveedor_info').innerHTML = '';
                     }
                 });
             }
 
-            // Seleccionar proveedor
-            function seleccionarProveedor(proveedor) {
-                idProveedorInput.value = proveedor.id;
-                buscadorProveedor.value = `${proveedor.empresa} (ID: ${proveedor.id})`;
-                dropdownProveedores.classList.remove('show');
-                proveedorInfo.innerHTML = `
-                    <span class="text-success">
-                        <strong>${proveedor.empresa}</strong> seleccionado<br>
-                        <small>Contacto: ${proveedor.contacto || 'N/A'} | Tel: ${proveedor.telefono || 'N/A'}</small>
-                    </span>
-                `;
-                
-                // Habilitar buscador de productos
-                buscadorProducto.disabled = false;
-                btnLimpiarProducto.disabled = false;
-                
-                // Filtrar productos del proveedor seleccionado
-                productosFiltrados = productos.filter(producto => 
-                    parseInt(producto.id_proveedor) === parseInt(proveedor.id)
+            function habilitarCamposProductos() {
+                const primerProducto = document.querySelector('.producto-ingreso');
+                primerProducto.querySelector('.producto-select').disabled = false;
+                primerProducto.querySelector('input[name="productos[0][cantidad]"]').disabled = false;
+                primerProducto.querySelector('input[name="productos[0][costo]"]').disabled = false;
+            }
+
+            function deshabilitarCamposProductos() {
+                document.querySelectorAll('.producto-ingreso').forEach(producto => {
+                    producto.querySelector('.producto-select').disabled = true;
+                    producto.querySelector('input[name$="[cantidad]"]').disabled = true;
+                    producto.querySelector('input[name$="[costo]"]').disabled = true;
+                });
+            }
+
+            function cargarProductosDelProveedor(idProveedor) {
+                const productosDelProveedor = <?php echo json_encode($productos); ?>.filter(producto => 
+                    parseInt(producto.id_proveedor) === parseInt(idProveedor)
                 );
                 
-                validarFormularioIngreso();
-            }
-
-            // Limpiar proveedor
-            btnLimpiarProveedor.addEventListener('click', function() {
-                idProveedorInput.value = '';
-                buscadorProveedor.value = '';
-                proveedorInfo.innerHTML = '';
-                buscadorProducto.disabled = true;
-                btnLimpiarProducto.disabled = true;
-                buscadorProducto.value = '';
-                dropdownProductos.classList.remove('show');
-                
-                // Limpiar productos seleccionados
-                productosSeleccionados = [];
-                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach(el => el.remove());
-                contadorIngreso = 0;
-                
-                validarFormularioIngreso();
-            });
-
-            // Buscar productos
-            if (buscadorProducto) {
-                buscadorProducto.addEventListener('input', function() {
-                    const texto = this.value.toLowerCase().trim();
-                    dropdownProductos.innerHTML = '';
+                // Actualizar todos los selects de productos
+                document.querySelectorAll('.producto-select').forEach(select => {
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">Seleccionar producto</option>';
                     
-                    if (texto.length < 2 || productosFiltrados.length === 0) {
-                        dropdownProductos.classList.remove('show');
-                        return;
-                    }
+                    productosDelProveedor.forEach(producto => {
+                        const option = document.createElement('option');
+                        option.value = producto.id;
+                        option.textContent = `${producto.nombre} (Stock: ${producto.stock})`;
+                        select.appendChild(option);
+                    });
                     
-                    const resultados = productosFiltrados.filter(producto => 
-                        producto.nombre.toLowerCase().includes(texto) &&
-                        !productosSeleccionados.some(p => p.id === producto.id)
-                    );
-                    
-                    if (resultados.length > 0) {
-                        resultados.forEach(producto => {
-                            const item = document.createElement('button');
-                            item.type = 'button';
-                            item.className = 'dropdown-item';
-                            item.innerHTML = `
-                                <strong>${producto.nombre}</strong><br>
-                                <small class="text-muted">
-                                    Stock: ${producto.stock} | Mín: ${producto.stock_minimo} | 
-                                    Categoría: ${producto.categoria}
-                                </small>
-                            `;
-                            item.addEventListener('click', function() {
-                                seleccionarProducto(producto);
-                            });
-                            dropdownProductos.appendChild(item);
-                        });
-                        dropdownProductos.classList.add('show');
-                    } else {
-                        const item = document.createElement('div');
-                        item.className = 'dropdown-item text-muted';
-                        item.textContent = 'No se encontraron productos o ya están seleccionados';
-                        dropdownProductos.appendChild(item);
-                        dropdownProductos.classList.add('show');
-                    }
-                });
-                
-                // Cerrar dropdown al hacer clic fuera
-                document.addEventListener('click', function(e) {
-                    if (!buscadorProducto.contains(e.target) && !dropdownProductos.contains(e.target)) {
-                        dropdownProductos.classList.remove('show');
+                    // Restaurar valor anterior si existe
+                    if (currentValue) {
+                        select.value = currentValue;
                     }
                 });
             }
-
-            // Limpiar producto
-            btnLimpiarProducto.addEventListener('click', function() {
-                buscadorProducto.value = '';
-                dropdownProductos.classList.remove('show');
-            });
-
-            // Seleccionar producto
-            function seleccionarProducto(producto) {
-                buscadorProducto.value = '';
-                dropdownProductos.classList.remove('show');
-                
-                // Agregar producto a la lista
-                agregarProductoALista(producto);
-                
-                // Habilitar botón para agregar otro producto
-                btnAgregarOtroProducto.disabled = false;
-                
-                validarFormularioIngreso();
-            }
-
-            // Agregar producto a la lista visual
-            function agregarProductoALista(producto) {
-                const productoBase = document.getElementById('producto_base');
-                const nuevoProducto = productoBase.cloneNode(true);
-                
-                nuevoProducto.id = `producto_${producto.id}`;
-                nuevoProducto.classList.remove('d-none');
-                
-                // Actualizar información del producto
-                nuevoProducto.querySelector('#producto_nombre').textContent = producto.nombre;
-                nuevoProducto.querySelector('#producto_id').value = producto.id;
-                nuevoProducto.querySelector('#producto_id').name = `productos[${contadorIngreso}][id]`;
-                nuevoProducto.querySelector('#producto_stock').textContent = producto.stock;
-                nuevoProducto.querySelector('#producto_stock_minimo').textContent = producto.stock_minimo;
-                
-                // Actualizar nombres de inputs
-                const cantidadInput = nuevoProducto.querySelector('input[name="productos[0][cantidad]"]');
-                const costoInput = nuevoProducto.querySelector('input[name="productos[0][costo]"]');
-                
-                cantidadInput.name = `productos[${contadorIngreso}][cantidad]`;
-                costoInput.name = `productos[${contadorIngreso}][costo]`;
-                
-                // Agregar event listeners para validación
-                cantidadInput.addEventListener('input', validarFormularioIngreso);
-                costoInput.addEventListener('input', validarFormularioIngreso);
-                
-                // Configurar botón eliminar
-                const btnEliminar = nuevoProducto.querySelector('.btn-eliminar-producto');
-                btnEliminar.addEventListener('click', function() {
-                    eliminarProductoDeLista(producto.id, nuevoProducto);
-                });
-                
-                productosContainer.appendChild(nuevoProducto);
-                productosSeleccionados.push({
-                    id: producto.id,
-                    nombre: producto.nombre,
-                    elemento: nuevoProducto
-                });
-                
-                contadorIngreso++;
-            }
-
-            // Eliminar producto de la lista
-            function eliminarProductoDeLista(productoId, elemento) {
-                productosSeleccionados = productosSeleccionados.filter(p => p.id !== productoId);
-                elemento.remove();
-                
-                // Reindexar productos
-                contadorIngreso = 0;
-                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach((el, index) => {
-                    const inputs = el.querySelectorAll('input');
-                    inputs[0].name = `productos[${index}][id]`;
-                    inputs[1].name = `productos[${index}][cantidad]`;
-                    inputs[2].name = `productos[${index}][costo]`;
-                    contadorIngreso++;
-                });
-                
-                // Deshabilitar botón si no hay productos
-                if (productosSeleccionados.length === 0) {
-                    btnAgregarOtroProducto.disabled = true;
-                }
-                
-                validarFormularioIngreso();
-            }
-
-            // Agregar otro producto
-            btnAgregarOtroProducto.addEventListener('click', function() {
-                buscadorProducto.focus();
-            });
 
             // Validar formulario
             function validarFormularioIngreso() {
-                const idProveedor = idProveedorInput.value;
+                const idProveedor = document.getElementById('id_proveedor_ingreso').value;
                 const formaPago = document.getElementById('forma_pago').value;
-                const productosCompletos = productosSeleccionados.length > 0;
+                const productos = document.querySelectorAll('.producto-select');
                 
-                let productosValidos = true;
-                
-                // Verificar que todos los productos tengan cantidad y costo válidos
-                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach(productoEl => {
-                    const cantidad = productoEl.querySelector('input[name$="[cantidad]"]').value;
-                    const costo = productoEl.querySelector('input[name$="[costo]"]').value;
+                let formularioValido = true;
+                let productosCompletos = 0;
+
+                // Validar proveedor
+                if (!idProveedor || idProveedor === '') {
+                    formularioValido = false;
+                }
+
+                // Validar forma de pago
+                if (!formaPago) {
+                    formularioValido = false;
+                }
+
+                // Validar productos
+                productos.forEach(select => {
+                    const productoId = select.value;
+                    const cantidadInput = select.closest('.row').querySelector('input[name$="[cantidad]"]');
+                    const costoInput = select.closest('.row').querySelector('input[name$="[costo]"]');
+                    const cantidad = cantidadInput ? cantidadInput.value : '';
+                    const costo = costoInput ? costoInput.value : '';
                     
-                    if (!cantidad || parseInt(cantidad) <= 0 || !costo || parseFloat(costo) <= 0) {
-                        productosValidos = false;
+                    if (productoId && cantidad && costo && 
+                        parseInt(cantidad) > 0 && parseFloat(costo) > 0) {
+                        productosCompletos++;
                     }
                 });
                 
-                const formularioValido = idProveedor && formaPago && productosCompletos && productosValidos;
+                if (productosCompletos === 0) {
+                    formularioValido = false;
+                }
+                
                 btnSubmitIngreso.disabled = !formularioValido;
                 
                 return formularioValido;
             }
 
+            // Agregar producto
+            btnAgregarProducto.addEventListener('click', function() {
+                const container = document.getElementById('productos-ingreso-container');
+                const nuevoProducto = document.createElement('div');
+                nuevoProducto.className = 'row producto-ingreso mb-2';
+                nuevoProducto.innerHTML = `
+                    <div class="col-md-5">
+                        <select class="form-select producto-select" name="productos[${contadorIngreso}][id]" required>
+                            <option value="">Seleccionar producto</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="number" class="form-control" name="productos[${contadorIngreso}][cantidad]" min="1" required placeholder="Cantidad">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="number" step="0.01" class="form-control" name="productos[${contadorIngreso}][costo]" required placeholder="Costo unitario">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-sm btn-danger btn-eliminar-producto">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(nuevoProducto);
+                
+                // Cargar productos en el nuevo select si hay proveedor seleccionado
+                const idProveedor = proveedorSelect.value;
+                if (idProveedor) {
+                    cargarProductosDelProveedor(idProveedor);
+                }
+                
+                contadorIngreso++;
+                actualizarBotonesEliminar();
+                
+                // Agregar event listeners para validación
+                const nuevosInputs = nuevoProducto.querySelectorAll('select, input');
+                nuevosInputs.forEach(input => {
+                    input.addEventListener('change', validarFormularioIngreso);
+                    input.addEventListener('input', validarFormularioIngreso);
+                });
+            });
+
+            // Eliminar producto
+            function actualizarBotonesEliminar() {
+                document.querySelectorAll('.btn-eliminar-producto').forEach((btn, index) => {
+                    const isFirst = index === 0;
+                    if (!isFirst) {
+                        btn.disabled = false;
+                        btn.onclick = function() {
+                            this.closest('.producto-ingreso').remove();
+                            reindexarProductos();
+                            validarFormularioIngreso();
+                        };
+                    }
+                });
+            }
+
+            function reindexarProductos() {
+                document.querySelectorAll('#productos-ingreso-container .producto-ingreso').forEach((fila, index) => {
+                    const selectInput = fila.querySelector('select');
+                    const cantidadInput = fila.querySelector('input[name$="[cantidad]"]');
+                    const costoInput = fila.querySelector('input[name$="[costo]"]');
+                    
+                    if (selectInput) selectInput.name = `productos[${index}][id]`;
+                    if (cantidadInput) cantidadInput.name = `productos[${index}][cantidad]`;
+                    if (costoInput) costoInput.name = `productos[${index}][costo]`;
+                });
+                
+                contadorIngreso = document.querySelectorAll('#productos-ingreso-container .producto-ingreso').length;
+            }
+
             // Validación en tiempo real
             document.addEventListener('input', function(e) {
-                if (e.target.matches('#forma_pago, input[name$="[cantidad]"], input[name$="[costo]"]')) {
+                if (e.target.matches('#id_proveedor_ingreso, #forma_pago, .producto-select, input[name$="[cantidad]"], input[name$="[costo]"]')) {
+                    validarFormularioIngreso();
+                }
+            });
+
+            document.addEventListener('change', function(e) {
+                if (e.target.matches('#id_proveedor_ingreso, #forma_pago, .producto-select, input[name$="[cantidad]"], input[name$="[costo]"]')) {
                     validarFormularioIngreso();
                 }
             });
@@ -1192,31 +1081,31 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                 if (!validarFormularioIngreso()) {
                     e.preventDefault();
                     alert('Por favor complete todos los campos requeridos correctamente.');
+                } else {
+                    // Mostrar confirmación simple
+                    const confirmacion = confirm('¿Está seguro de que desea registrar el ingreso de mercadería?');
+                    
+                    if (!confirmacion) {
+                        e.preventDefault();
+                    }
                 }
             });
 
             // Limpiar modal al cerrar
             document.getElementById('modalIngresoMasivo').addEventListener('hidden.bs.modal', function() {
-                // Limpiar proveedor
-                idProveedorInput.value = '';
-                buscadorProveedor.value = '';
-                proveedorInfo.innerHTML = '';
-                
-                // Limpiar productos
-                buscadorProducto.disabled = true;
-                btnLimpiarProducto.disabled = true;
-                buscadorProducto.value = '';
-                productosSeleccionados = [];
-                productosContainer.querySelectorAll('.producto-seleccionado:not(#producto_base)').forEach(el => el.remove());
-                contadorIngreso = 0;
-                
-                // Limpiar otros campos
+                document.getElementById('id_proveedor_ingreso').value = '';
                 document.getElementById('forma_pago').value = '';
                 document.getElementById('observaciones').value = '';
                 
-                // Deshabilitar botones
-                btnAgregarOtroProducto.disabled = true;
+                // Mantener solo el primer producto
+                document.querySelectorAll('#productos-ingreso-container .producto-ingreso:not(:first-child)').forEach(el => el.remove());
+                
+                contadorIngreso = 1;
+                actualizarBotonesEliminar();
+                deshabilitarCamposProductos();
+                btnAgregarProducto.disabled = true;
                 btnSubmitIngreso.disabled = true;
+                document.getElementById('proveedor_info').innerHTML = '';
             });
 
             // --- Script para manejar el modal de egreso masivo ---
