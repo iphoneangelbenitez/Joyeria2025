@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="card-body">
             <div class="logo">
                 <i class="bi bi-gem"></i>
-                <h3>Joyería Luxury</h3>
+                <h3>Joyería Sosa</h3>
                 <p>Crear Usuario Administrador</p>
             </div>
             

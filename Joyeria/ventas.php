@@ -7,12 +7,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 
-/* Compatibilidad de nombres de sesión en español e inglés */
 if (!isset($_SESSION['id_usuario']) && isset($_SESSION['user_id'])) {
     $_SESSION['id_usuario'] = $_SESSION['user_id'];
 }
 
-/* Verificación de sesión (usa nuevas claves; cae a las viejas si existen) */
 if (!isset($_SESSION['id_usuario']) && !isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
@@ -282,51 +280,7 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
     })();
     </script>
 
-    <style>
-        /* Estilo para los controles de Tom-Select (los buscadores) */
-        .ts-control {
-            padding-top: 0.5rem;    
-            padding-bottom: 0.5rem;
-            min-height: calc(2.5rem + 2px); 
-
-            /* --- NUEVOS ESTILOS DARK --- */
-            background-color: #343a40; /* Color de fondo oscuro (como el input de Cantidad) */
-            border-color: #495057;     /* Color de borde oscuro */
-            color: #f8f9fa;            /* Color de texto claro */
-        }
-        
-        /* Placeholder y texto de ítem seleccionado */
-        .ts-control .ts-input::placeholder,
-        .ts-control > .item {
-            color: #f8f9fa;
-        }
-
-        /* El campo de texto donde se escribe */
-        .ts-input {
-            font-size: 1rem;
-            color: #f8f9fa !important; /* Forzar color de texto al escribir */
-        }
-
-        /* El menú desplegable */
-        .ts-dropdown {
-            background-color: #343a40;
-            border-color: #495057;
-        }
-
-        /* Las opciones dentro del desplegable */
-        .ts-option {
-            color: #f8f9fa;
-            padding-top: 0.5rem;
-            padding-bottom: 0.5rem;
-        }
-
-        /* Opción activa o al pasar el mouse */
-        .ts-option.active, 
-        .ts-option:hover {
-            background-color: #495057; /* Un gris un poco más claro */
-            color: #fff;
-        }
-    </style>
+   
     </head>
 <body>
     <?php include 'includes/navbar.php'; ?>

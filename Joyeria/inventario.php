@@ -33,8 +33,19 @@ $accion = $_GET['action'] ?? '';
 $idUsuario = isset($_SESSION['id_usuario']) ? (int)$_SESSION['id_usuario'] : (int)$_SESSION['user_id'];
 
 
+
+
 /* Procesar formularios solo si es administrador */
 if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
+
+
+
+
+
+
+
+
+
 
     /* Crear nuevo producto */
     if (isset($_POST['crear_producto'])) {
@@ -91,6 +102,58 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Error: " . $e->getMessage();
         }
     }
+
+
+
+
+
+
+/* TESTING */
+
+// --- LÓGICA PARA AGREGAR NUEVA CATEGORÍA (Corregido estilo Joyería) ---
+if (isset($_POST['guardar_categoria'])) {
+    try {
+        $nombre_cat = $_POST['nombre_categoria'] ?? '';
+        $dias_garantia = (int)($_POST['dias_garantia'] ?? 0);
+
+        if (!empty($nombre_cat)) {
+            // 1. Verificar si ya existe (Usando $conexion y bindParam)
+            $consultaCheck = "SELECT id FROM categorias WHERE nombre = :nombre";
+            $stmtCheck = $conexion->prepare($consultaCheck);
+            $stmtCheck->bindParam(':nombre', $nombre_cat);
+            $stmtCheck->execute();
+
+            if ($stmtCheck->fetch()) {
+                $error = "Esa categoría ya existe en el sistema.";
+            } else {
+                // 2. Insertar nueva categoría
+                $consultaInsert = "INSERT INTO categorias (nombre, dias_garantia) VALUES (:nombre, :dias)";
+                $stmtInsert = $conexion->prepare($consultaInsert);
+                $stmtInsert->bindParam(':nombre', $nombre_cat);
+                $stmtInsert->bindParam(':dias', $dias_garantia, PDO::PARAM_INT);
+
+                if ($stmtInsert->execute()) {
+                    $mensaje = "Categoría creada exitosamente."; // Usamos $mensaje como en tu otro código
+                } else {
+                    $error = "No se pudo guardar la categoría.";
+                }
+            }
+        } else {
+            $error = "El nombre es obligatorio.";
+        }
+    } catch (PDOException $e) {
+        $error = "Error de base de datos: " . $e->getMessage();
+    }
+}
+// ------------------------------------------------
+// ------------------------------------
+
+/* TESTING */
+
+
+
+
+
 
     /* Actualizar producto */
     if (isset($_POST['actualizar_producto'])) {
@@ -325,12 +388,33 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
 
             <?php if ($esAdministrador): ?>
             
-            <div class="row mb-3">
-                <div class="col-12">
-                    <button class="btn btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#formularioProducto" aria-expanded="<?php echo isset($productoEditar) ? 'true' : 'false'; ?>" aria-controls="formularioProducto">
-                        <i class="bi bi-plus-circle me-2"></i><?php echo isset($productoEditar) ? 'Editando Producto' : 'Agregar Nuevo Producto'; ?>
-                    </button>
-                </div>
+
+
+
+<div class="row mb-3">
+    <div class="col-12 d-flex"> <button class="btn btn-success me-2" type="button" data-bs-toggle="collapse" data-bs-target="#formularioProducto" aria-expanded="<?php echo isset($productoEditar) ? 'true' : 'false'; ?>" aria-controls="formularioProducto">
+            <i class="bi bi-plus-circle me-2"></i>
+            <?php echo isset($productoEditar) ? 'Editando Producto' : 'Agregar Nuevo Producto'; ?>
+        </button>
+
+        <button class="btn btn-info text-white" type="button" data-bs-toggle="collapse" data-bs-target="#formularioCategoria" aria-expanded="false" aria-controls="formularioCategoria">
+            <i class="bi bi-tags-fill me-2"></i>Nueva Categoría
+        </button>
+
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+                
+
             </div>
             <div class="row mb-4 collapse <?php echo isset($productoEditar) ? 'show' : ''; ?>" id="formularioProducto">
             <div class="col-md-12">
@@ -436,6 +520,44 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                 </div>
             </div>
             <?php endif; ?>
+
+<div class="collapse mb-4" id="formularioCategoria">
+    <div class="card card-body border-info shadow-sm">
+        <h5 class="text-info"><i class="bi bi-tags"></i> Registrar Categoría</h5>
+        <form method="POST"> 
+            <div class="row align-items-end">
+                <div class="col-md-5">
+                    <label for="nombre_cat" class="form-label">Nombre de Categoría</label>
+                    <input type="text" class="form-control" id="nombre_cat" name="nombre_categoria" required placeholder="Ej: Relojes">
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="garantia_cat" class="form-label">Días de Garantía</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="garantia_cat" name="dias_garantia" min="0" value="0">
+                        <span class="input-group-text">días</span>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <button type="submit" name="guardar_categoria" class="btn btn-primary w-100">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+            
 
             <div class="row">
                 <div class="col-md-12">

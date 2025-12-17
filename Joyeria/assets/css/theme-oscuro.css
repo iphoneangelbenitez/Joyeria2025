@@ -90,8 +90,226 @@ small, .form-text {
   mask-composite: exclude;
   pointer-events: none;
 }
+/* ---------------------------------------------------- */
+/* ESTILOS ESPECÍFICOS PARA INVENTARIO - TABLA
+/* ---------------------------------------------------- */
 
+/* Tabla de inventario en modo oscuro */
+.inventario-container .table {
+    color: #ffffff !important; /* Texto blanco */
+}
 
+.inventario-container .table thead th {
+    color: #ffffff !important; /* Encabezados blancos */
+    border-bottom-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.inventario-container .table tbody td {
+    color: #ffffff !important; /* Celdas blancas */
+    background-color: transparent !important; /* Mantener fondo transparente */
+}
+
+.inventario-container .table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important; /* Hover más visible */
+}
+
+/* Badges en tabla de inventario */
+.inventario-container .badge {
+    color: #ffffff !important; /* Texto de badges blanco */
+}
+
+/* Estados de stock en inventario */
+.inventario-container .stock-bajo {
+    background: rgba(246, 193, 67, .20) !important; /* Amarillo más visible */
+    color: #ffffff !important;
+}
+
+.inventario-container .stock-critico {
+    background: rgba(220, 53, 69, .20) !important; /* Rojo más visible */
+    color: #ffffff !important;
+}
+
+/* Productos ocultos */
+.inventario-container .producto-oculto {
+    opacity: 0.7 !important;
+    color: #cccccc !important; /* Gris claro para productos ocultos */
+}
+
+/* ---------------------------------------------------- */
+/* SOBREESCRITURAS PARA TEMA CLARO - INVENTARIO
+/* ---------------------------------------------------- */
+html.theme-light .inventario-container .table {
+    color: #1a1f28 !important; /* Volver al color original en tema claro */
+}
+
+html.theme-light .inventario-container .table thead th {
+    color: #1a1f28 !important;
+    border-bottom-color: rgba(0, 0, 0, 0.18) !important;
+}
+
+html.theme-light .inventario-container .table tbody td {
+    color: #1a1f28 !important;
+}
+
+html.theme-light .inventario-container .badge {
+    color: inherit !important; /* Volver colores originales de badges */
+}
+
+/* ---------------------------------------------------- */
+/* ESTILOS PARA MODALES EN TEMA OSCURO
+/* ---------------------------------------------------- */
+
+/* Fondo del modal */
+.modal-content {
+    background: linear-gradient(180deg, #181b22 0%, #14181f 100%) !important;
+    border: 1px solid rgba(255, 255, 255, .06) !important;
+    border-radius: var(--borde) !important;
+    color: #e9edf2 !important;
+}
+
+/* Encabezado del modal */
+.modal-header {
+    background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .03)) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, .08) !important;
+    color: #ffffff !important;
+}
+
+.modal-title {
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+/* Cuerpo del modal */
+.modal-body {
+    background: transparent !important;
+    color: #e9edf2 !important;
+}
+
+/* Pie del modal */
+.modal-footer {
+    background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .03)) !important;
+    border-top: 1px solid rgba(255, 255, 255, .08) !important;
+}
+
+/* Fondo oscuro detrás del modal */
+.modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+.modal-backdrop.show {
+    opacity: 0.8 !important;
+}
+
+/* Botón de cerrar personalizado */
+.btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%) !important;
+    opacity: 0.8 !important;
+}
+
+.btn-close:hover {
+    opacity: 1 !important;
+    filter: invert(1) grayscale(100%) brightness(300%) !important;
+}
+
+/* Formularios dentro del modal */
+.modal-content .form-label {
+    color: #dfe6ef !important;
+}
+
+.modal-content .form-control,
+.modal-content .form-select {
+    background: #0f1319 !important;
+    color: #e7ecf3 !important;
+    border: 1px solid rgba(255, 255, 255, .10) !important;
+}
+
+.modal-content .form-control:focus,
+.modal-content .form-select:focus {
+    border-color: var(--oro) !important;
+    box-shadow: 0 0 0 .2rem rgba(212, 175, 55, .15) !important;
+    background: #10151c !important;
+    color: #fff !important;
+}
+
+/* Texto de ayuda dentro del modal */
+.modal-content .form-text {
+    color: #aab3bf !important;
+}
+
+/* Alertas dentro del modal */
+.modal-content .alert {
+    background: rgba(255, 255, 255, .05) !important;
+    border: 1px solid rgba(255, 255, 255, .12) !important;
+    color: #e9edf2 !important;
+}
+
+/* ---------------------------------------------------- */
+/* SOBREESCRITURAS PARA TEMA CLARO - MODALES
+/* ---------------------------------------------------- */
+html.theme-light .modal-content {
+    background: #ffffff !important;
+    border-color: rgba(0, 0, 0, .10) !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .modal-header {
+    background: #f8f9fa !important;
+    border-bottom-color: rgba(0, 0, 0, .12) !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .modal-title {
+    color: #1a1f28 !important;
+}
+
+html.theme-light .modal-body {
+    background: #ffffff !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .modal-footer {
+    background: #f8f9fa !important;
+    border-top-color: rgba(0, 0, 0, .12) !important;
+}
+
+html.theme-light .btn-close {
+    filter: none !important;
+    opacity: 0.5 !important;
+}
+
+html.theme-light .btn-close:hover {
+    opacity: 0.75 !important;
+    filter: none !important;
+}
+
+html.theme-light .modal-content .form-label {
+    color: #1a1f28 !important;
+}
+
+html.theme-light .modal-content .form-control,
+html.theme-light .modal-content .form-select {
+    background: #fdfdfd !important;
+    color: #1a1f28 !important;
+    border-color: rgba(0, 0, 0, .15) !important;
+}
+
+html.theme-light .modal-content .form-control:focus,
+html.theme-light .modal-content .form-select:focus {
+    border-color: #b8860b !important;
+    box-shadow: 0 0 0 .2rem rgba(184, 134, 11, .15) !important;
+    background: #ffffff !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .modal-content .form-text {
+    color: #5f6e81 !important;
+}
+
+html.theme-light .modal-content .alert {
+    background: #f8f9fa !important;
+    border-color: rgba(0, 0, 0, .15) !important;
+    color: #1a1f28 !important;
+}
 /* ---------------------------------------------------- */
 /* 3. ANIMACIONES (@KEYFRAMES)
 /* ---------------------------------------------------- */
@@ -142,10 +360,7 @@ small, .form-text {
 }
 .btn-secondary { background: #2a2f38; border-color: #2a2f38; }
 .btn-secondary:hover { filter: brightness(1.1); }
-.btn-success {
-  background: linear-gradient(180deg, #45b97a, #3aa16a);
-  border-color: #3aa16a;
-}
+.btn-success { background: linear-gradient(180deg, #45b97a, #3aa16a); border-color: #3aa16a; }
 .btn-danger { background: #e25555; border-color: #e25555; }
 .btn-danger:hover { filter: brightness(1.05); }
 .btn-warning { background: #f6c453; border-color: #f6c453; color: #1a1a1a; }
@@ -178,6 +393,128 @@ small, .form-text {
   box-shadow: 0 0 0 .2rem rgba(212, 175, 55, .15);
   background: #10151c;
   color: #fff;
+}
+
+/* ---------------------------------------------------- */
+/* ESTILOS PARA TOMSELECT (Buscadores) - TEMA OSCURO
+/* ---------------------------------------------------- */
+
+/* Contenedor principal del select */
+.ts-control {
+    background-color: #0f1319 !important; /* Mismo color que el input de cantidad */
+    border: 1px solid rgba(255, 255, 255, .10) !important; /* Mismo borde */
+    color: #e7ecf3 !important; /* Mismo color de texto */
+    border-radius: 10px !important;
+}
+
+/* Input de búsqueda */
+.ts-control input {
+    color: #e7ecf3 !important;
+    background: transparent !important;
+}
+
+/* Placeholder */
+.ts-control .item.placeholder {
+    color: #aab3bf !important; /* Color similar al texto secundario */
+}
+
+/* Dropdown del select */
+.ts-dropdown {
+    background-color: #0f1319 !important; /* Mismo color de fondo */
+    border: 1px solid rgba(255, 255, 255, .10) !important;
+    color: #e7ecf3 !important;
+    border-radius: 10px !important;
+}
+
+/* Opciones individuales */
+.ts-dropdown .option {
+    background-color: #0f1319 !important;
+    color: #e7ecf3 !important;
+}
+
+/* Opción activa/seleccionada */
+.ts-dropdown .active {
+    background-color: #10151c !important; /* Color de focus */
+    color: #ffffff !important;
+}
+
+/* Opción seleccionada */
+.ts-dropdown .selected {
+    background-color: #10151c !important;
+    color: #ffffff !important;
+}
+
+/* Opción con foco/resaltada */
+.ts-dropdown .highlight {
+    background-color: var(--oro) !important; /* Usar el color oro para el highlight */
+    color: #1a1a1a !important; /* Texto oscuro para contraste */
+}
+
+/* Items seleccionados (modo múltiple) */
+.ts-wrapper.multi .ts-control > div {
+    background-color: #10151c !important;
+    color: #e7ecf3 !important;
+    border: 1px solid rgba(255, 255, 255, .10) !important;
+}
+
+/* Botón de eliminar item seleccionado */
+.ts-wrapper.multi .ts-control > div .remove {
+    border-color: #e7ecf3 !important;
+    color: #e7ecf3 !important;
+}
+
+/* Icono de flecha */
+.ts-control .dropdown-handle {
+    border-top-color: #e7ecf3 !important;
+}
+
+/* ---------------------------------------------------- */
+/* SOBREESCRITURAS PARA TEMA CLARO - TOMSELECT
+/* ---------------------------------------------------- */
+html.theme-light .ts-control {
+    background-color: #fdfdfd !important;
+    border-color: rgba(0, 0, 0, .15) !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .ts-control input {
+    color: #1a1f28 !important;
+}
+
+html.theme-light .ts-control .item.placeholder {
+    color: #5f6e81 !important;
+}
+
+html.theme-light .ts-dropdown {
+    background-color: #fdfdfd !important;
+    border-color: rgba(0, 0, 0, .15) !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .ts-dropdown .option {
+    background-color: #fdfdfd !important;
+    color: #1a1f28 !important;
+}
+
+html.theme-light .ts-dropdown .active,
+html.theme-light .ts-dropdown .selected {
+    background-color: #ffffff !important; /* Fondo blanco para activos */
+    color: #1a1f28 !important;
+}
+
+html.theme-light .ts-dropdown .highlight {
+    background-color: #b8860b !important; /* Oro claro */
+    color: #ffffff !important; /* Texto blanco para contraste */
+}
+
+html.theme-light .ts-wrapper.multi .ts-control > div {
+    background-color: #f8f9fa !important;
+    color: #1a1f28 !important;
+    border-color: rgba(0, 0, 0, .15) !important;
+}
+
+html.theme-light .ts-control .dropdown-handle {
+    border-top-color: #1a1f28 !important;
 }
 
 /* --- Alertas --- */
@@ -255,14 +592,14 @@ small, .form-text {
 
 /* --- Tablas (Unificadas) --- */
 .table {
-  color: #e9edf2;
+  color: #ffffff;
   --bs-table-bg: transparent;
   --bs-table-striped-bg: rgba(255, 255, 255, .03);
   --bs-table-hover-bg: rgba(255, 255, 255, .05);
   border-color: rgba(255, 255, 255, .08);
 }
 .table thead th {
-  color: #f6f7fb;
+  color: #ffffff;
   border-bottom-color: rgba(255, 255, 255, .18);
 }
 .table-hover tbody tr:hover {

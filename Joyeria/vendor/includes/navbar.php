@@ -175,11 +175,15 @@ if (isset($_SESSION['nombre_usuario'])) {
                         <i class="bi bi-gear me-1"></i>Opciones
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
-
+                        <li>
+                            <a class="dropdown-item" href="perfil.php">
+                                <i class="bi bi-person me-2"></i>Mi Perfil
+                            </a>
+                        </li>
                         
                         <?php if ($user_type == 'ADM'): ?>
                         <li>
-                            <a class="dropdown-item" href="create_vendor.php">
+                            <a class="dropdown-item" href="usuarios.php">
                                 <i class="bi bi-people me-2"></i>Gestionar Usuarios
                             </a>
                         </li>
