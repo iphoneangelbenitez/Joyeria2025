@@ -18,40 +18,69 @@ $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01'); // Primer día del mes
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t'); // Último día del mes
 $metodo_pago = $_GET['metodo_pago'] ?? '';
 $id_vendedor = $_GET['id_vendedor'] ?? '';
-// NUEVO: Por defecto mostramos solo COMPLETADA para que sume bien la plata
 $estado_filtro = $_GET['estado'] ?? 'COMPLETADA'; 
 
-// --- 1. CONSULTA PRINCIPAL (TABLA) ---
-$query_ventas = "SELECT v.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido, 
-                        u.nombre as vendedor_nombre, COUNT(vd.id) as items,
-                        SUM(vd.cantidad * vd.precio_unitario) as subtotal_base
-                 FROM ventas v
-                 INNER JOIN clientes c ON v.id_cliente = c.id
-                 INNER JOIN usuarios u ON v.id_usuario = u.id
-                 INNER JOIN venta_detalles vd ON v.id = vd.id_venta
-                 WHERE v.fecha BETWEEN :fecha_inicio AND :fecha_fin";
-
+// --- CONSTRUCCIÓN DE FILTROS COMUNES (DRY - Don't Repeat Yourself) ---
+// Creamos una base de condiciones WHERE para reutilizar en todas las consultas
+$condiciones = "v.fecha BETWEEN :fecha_inicio AND :fecha_fin";
 $params = [
     ':fecha_inicio' => $fecha_inicio . ' 00:00:00',
     ':fecha_fin' => $fecha_fin . ' 23:59:59'
 ];
 
-// Filtros dinámicos
 if (!empty($metodo_pago)) {
-    $query_ventas .= " AND v.metodo_pago = :metodo_pago";
+    $condiciones .= " AND v.metodo_pago = :metodo_pago";
     $params[':metodo_pago'] = $metodo_pago;
 }
 if (!empty($id_vendedor) && $esAdministrador) {
-    $query_ventas .= " AND v.id_usuario = :id_vendedor";
+    $condiciones .= " AND v.id_usuario = :id_vendedor";
     $params[':id_vendedor'] = $id_vendedor;
 }
-// Filtro de Estado (Clave para solucionar tu problema)
 if ($estado_filtro !== 'TODOS') {
-    $query_ventas .= " AND v.estado = :estado";
+    $condiciones .= " AND v.estado = :estado";
     $params[':estado'] = $estado_filtro;
 }
 
-$query_ventas .= " GROUP BY v.id ORDER BY v.fecha DESC";
+// --- 1. ESTADÍSTICAS FINANCIERAS (SOLUCIÓN AL ERROR DE SUMA) ---
+// Consultamos SOLO la tabla ventas para evitar duplicar el dinero si hay multiples items
+$query_finanzas = "SELECT 
+    COUNT(v.id) as total_ventas,
+    SUM(v.total) as ingresos_totales,
+    AVG(v.total) as promedio_venta,
+    SUM(v.descuento) as descuentos_totales
+FROM ventas v
+WHERE $condiciones";
+
+$stmt_finanzas = $db->prepare($query_finanzas);
+foreach ($params as $key => $value) { $stmt_finanzas->bindValue($key, $value); }
+$stmt_finanzas->execute();
+$stats_finanzas = $stmt_finanzas->fetch(PDO::FETCH_ASSOC);
+
+// --- 2. ESTADÍSTICAS DE PRODUCTOS (SEPARADA) ---
+// Consultamos detalles para saber la cantidad de items
+$query_productos = "SELECT SUM(vd.cantidad) as productos_vendidos
+FROM venta_detalles vd
+INNER JOIN ventas v ON vd.id_venta = v.id
+WHERE $condiciones";
+
+$stmt_prods = $db->prepare($query_productos);
+foreach ($params as $key => $value) { $stmt_prods->bindValue($key, $value); }
+$stmt_prods->execute();
+$stats_productos = $stmt_prods->fetch(PDO::FETCH_ASSOC);
+
+// Unimos los resultados para usarlos fácil en el HTML
+$estadisticas = array_merge($stats_finanzas, $stats_productos);
+
+
+// --- 3. LISTADO DE VENTAS (TABLA) ---
+$query_ventas = "SELECT v.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido, 
+                        u.nombre as vendedor_nombre, COUNT(vd.id) as items
+                 FROM ventas v
+                 INNER JOIN clientes c ON v.id_cliente = c.id
+                 INNER JOIN usuarios u ON v.id_usuario = u.id
+                 LEFT JOIN venta_detalles vd ON v.id = vd.id_venta
+                 WHERE $condiciones
+                 GROUP BY v.id ORDER BY v.fecha DESC";
 
 $stmt_ventas = $db->prepare($query_ventas);
 foreach ($params as $key => $value) { $stmt_ventas->bindValue($key, $value); }
@@ -59,71 +88,26 @@ $stmt_ventas->execute();
 $ventas = $stmt_ventas->fetchAll(PDO::FETCH_ASSOC);
 
 
-// --- 2. ESTADÍSTICAS GENERALES (TARJETAS) ---
-// Reutilizamos la lógica de filtros para que los números de arriba coincidan con la tabla
-$query_estadisticas = "SELECT 
-    COUNT(DISTINCT v.id) as total_ventas,
-    SUM(v.total) as ingresos_totales,
-    AVG(v.total) as promedio_venta,
-    SUM(v.descuento) as descuentos_totales,
-    SUM(vd.cantidad) as productos_vendidos
-FROM ventas v
-INNER JOIN venta_detalles vd ON v.id = vd.id_venta
-WHERE v.fecha BETWEEN :fecha_inicio AND :fecha_fin";
-
-$params_stats = [
-    ':fecha_inicio' => $fecha_inicio . ' 00:00:00',
-    ':fecha_fin' => $fecha_fin . ' 23:59:59'
-];
-
-if (!empty($metodo_pago)) {
-    $query_estadisticas .= " AND v.metodo_pago = :mp";
-    $params_stats[':mp'] = $metodo_pago;
-}
-if ($estado_filtro !== 'TODOS') {
-    $query_estadisticas .= " AND v.estado = :est";
-    $params_stats[':est'] = $estado_filtro;
-}
-if (!empty($id_vendedor) && $esAdministrador) {
-    $query_estadisticas .= " AND v.id_usuario = :vnd";
-    $params_stats[':vnd'] = $id_vendedor;
-}
-
-$stmt_estadisticas = $db->prepare($query_estadisticas);
-foreach ($params_stats as $key => $value) { $stmt_estadisticas->bindValue($key, $value); }
-$stmt_estadisticas->execute();
-$estadisticas = $stmt_estadisticas->fetch(PDO::FETCH_ASSOC);
-
-
-// --- 3. GRÁFICO: MÉTODOS DE PAGO ---
+// --- 4. GRÁFICO: MÉTODOS DE PAGO ---
 $query_metodos = "SELECT metodo_pago, COUNT(*) as cantidad, SUM(total) as monto_total
                   FROM ventas v
-                  WHERE fecha BETWEEN :fi AND :ff";
-// Si estamos filtrando solo completadas, el gráfico también debe reflejarlo
-if ($estado_filtro !== 'TODOS') {
-    $query_metodos .= " AND estado = '" . $estado_filtro . "'";
-}
-$query_metodos .= " GROUP BY metodo_pago";
+                  WHERE $condiciones
+                  GROUP BY metodo_pago";
 
 $stmt_metodos = $db->prepare($query_metodos);
-$stmt_metodos->bindValue(':fi', $fecha_inicio . ' 00:00:00');
-$stmt_metodos->bindValue(':ff', $fecha_fin . ' 23:59:59');
+foreach ($params as $key => $value) { $stmt_metodos->bindValue($key, $value); }
 $stmt_metodos->execute();
 $metodos_pago = $stmt_metodos->fetchAll(PDO::FETCH_ASSOC);
 
 
-// --- 4. GRÁFICO: VENTAS POR DÍA ---
+// --- 5. GRÁFICO: VENTAS POR DÍA ---
 $query_dias = "SELECT DATE(fecha) as dia, COUNT(*) as cantidad_ventas, SUM(total) as monto_total
                FROM ventas v
-               WHERE fecha BETWEEN :fi AND :ff";
-if ($estado_filtro !== 'TODOS') {
-    $query_dias .= " AND estado = '" . $estado_filtro . "'";
-}
-$query_dias .= " GROUP BY DATE(fecha) ORDER BY dia";
+               WHERE $condiciones
+               GROUP BY DATE(fecha) ORDER BY dia";
 
 $stmt_dias = $db->prepare($query_dias);
-$stmt_dias->bindValue(':fi', $fecha_inicio . ' 00:00:00');
-$stmt_dias->bindValue(':ff', $fecha_fin . ' 23:59:59');
+foreach ($params as $key => $value) { $stmt_dias->bindValue($key, $value); }
 $stmt_dias->execute();
 $ventas_por_dia = $stmt_dias->fetchAll(PDO::FETCH_ASSOC);
 
@@ -412,44 +396,64 @@ if ($esAdministrador) {
         }
 
         function exportarPDF() {
-            const url = `generar_reporte_pdf.php?fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&metodo_pago=<?php echo $metodo_pago; ?>&id_vendedor=<?php echo $id_vendedor; ?>&estado=<?php echo $estado_filtro; ?>`;
+            // Se toman los valores de los inputs del formulario
+            const fi = document.querySelector('input[name="fecha_inicio"]').value;
+            const ff = document.querySelector('input[name="fecha_fin"]').value;
+            const mp = document.querySelector('select[name="metodo_pago"]').value;
+            const est = document.querySelector('select[name="estado"]').value;
+            
+            // Para el vendedor, verificamos si existe el elemento (por si no es admin)
+            const vendedorSelect = document.querySelector('select[name="id_vendedor"]');
+            const vend = vendedorSelect ? vendedorSelect.value : '';
+
+            const url = `generar_reporte_pdf.php?fecha_inicio=${fi}&fecha_fin=${ff}&metodo_pago=${mp}&id_vendedor=${vend}&estado=${est}`;
             window.open(url, '_blank');
         }
 
         // --- Gráficos JS ---
-        const ventasPorDiaData = {
-            labels: [<?php echo implode(',', array_map(function($v) { return "'" . date('d/m', strtotime($v['dia'])) . "'"; }, $ventas_por_dia)); ?>],
-            datasets: [{
-                label: 'Monto de Ventas ($)',
-                data: [<?php echo implode(',', array_column($ventas_por_dia, 'monto_total')); ?>],
-                backgroundColor: 'rgba(212, 175, 55, 0.2)',
-                borderColor: 'rgba(212, 175, 55, 1)',
-                borderWidth: 2,
-                tension: 0.3,
-                fill: true
-            }]
-        };
+        // Se inyectan los datos de PHP a JS de forma segura para los arrays
+        const ventasLabels = [<?php echo implode(',', array_map(function($v) { return "'" . date('d/m', strtotime($v['dia'])) . "'"; }, $ventas_por_dia)); ?>];
+        const ventasData = [<?php echo implode(',', array_column($ventas_por_dia, 'monto_total')); ?>];
 
-        const metodosPagoData = {
-            labels: [<?php echo implode(',', array_map(function($v) { return "'" . $v['metodo_pago'] . "'"; }, $metodos_pago)); ?>],
-            datasets: [{
-                data: [<?php echo implode(',', array_column($metodos_pago, 'monto_total')); ?>],
-                backgroundColor: ['#198754', '#0d6efd', '#6c757d', '#ffc107'],
-                borderWidth: 0
-            }]
-        };
+        const metodosLabels = [<?php echo implode(',', array_map(function($v) { return "'" . $v['metodo_pago'] . "'"; }, $metodos_pago)); ?>];
+        const metodosData = [<?php echo implode(',', array_column($metodos_pago, 'monto_total')); ?>];
 
         document.addEventListener('DOMContentLoaded', function() {
-            new Chart(document.getElementById('chartVentasPorDia'), {
-                type: 'line',
-                data: ventasPorDiaData,
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-            });
-            new Chart(document.getElementById('chartMetodosPago'), {
-                type: 'doughnut',
-                data: metodosPagoData,
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
-            });
+            // Grafico de linea
+            if(document.getElementById('chartVentasPorDia')) {
+                new Chart(document.getElementById('chartVentasPorDia'), {
+                    type: 'line',
+                    data: {
+                        labels: ventasLabels,
+                        datasets: [{
+                            label: 'Monto de Ventas ($)',
+                            data: ventasData,
+                            backgroundColor: 'rgba(212, 175, 55, 0.2)',
+                            borderColor: 'rgba(212, 175, 55, 1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // Grafico de dona
+            if(document.getElementById('chartMetodosPago')) {
+                new Chart(document.getElementById('chartMetodosPago'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: metodosLabels,
+                        datasets: [{
+                            data: metodosData,
+                            backgroundColor: ['#198754', '#0d6efd', '#6c757d', '#ffc107'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                });
+            }
         });
     </script>
 </body>

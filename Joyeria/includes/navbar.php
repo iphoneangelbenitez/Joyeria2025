@@ -108,6 +108,9 @@ if (isset($_SESSION['nombre_usuario'])) {
                         <i class="bi bi-graph-up me-1"></i>Reportes
                     </a>
                     <ul class="dropdown-menu" aria-labelledby="navbarReportsDropdown">
+                        <li><a class="dropdown-item" href="reportes_financieros.php"><i class="bi bi-piggy-bank me-2"></i>Finanzas y Ganancias</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        
                         <li><a class="dropdown-item" href="reportes_compras.php">Compras</a></li>
                         <li><a class="dropdown-item" href="reportes_ventas.php">Ventas</a></li>
                         <li><a class="dropdown-item" href="reportes_inventario.php">Inventario</a></li>
