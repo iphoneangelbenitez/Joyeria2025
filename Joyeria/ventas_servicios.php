@@ -22,6 +22,7 @@ $conexion = $baseDeDatos->getConnection();
 
 $error = '';
 $mensaje = '';
+$ticket_id_generado = null; // Variable para controlar si mostramos la pantalla de éxito
 
 // --- 3. VALIDAR Y OBTENER SERVICIO ---
 if (!isset($_GET['id']) || empty($_GET['id'])) {
@@ -51,7 +52,6 @@ try {
     }
 
     // Calcular montos
-    // Como no tienes columna 'saldo', asumimos que se debe pagar el costo total del servicio.
     $monto_a_pagar = $servicio['costo_servicio'];
 
 } catch (PDOException $e) {
@@ -62,17 +62,20 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id_usuario = $_SESSION['id_usuario']; 
     $total = $monto_a_pagar; 
-    $nuevo_estado = $_POST['estado_final']; 
+    $nuevo_estado = $_POST['estado_final'];
+    $metodo_pago = $_POST['metodo_pago'];
 
     try {
         $conexion->beginTransaction();
 
         // A. Insertar Cabecera (servicios_ventas)
-        $sqlVenta = "INSERT INTO servicios_ventas (fecha, id_cliente, total, id_usuario) VALUES (NOW(), :id_cliente, :total, :id_usuario)";
+        // Asegúrate de haber agregado la columna metodo_pago en la BD como indicamos antes
+        $sqlVenta = "INSERT INTO servicios_ventas (fecha, id_cliente, total, id_usuario, metodo_pago) VALUES (NOW(), :id_cliente, :total, :id_usuario, :metodo_pago)";
         $stmtV = $conexion->prepare($sqlVenta);
         $stmtV->bindParam(':id_cliente', $servicio['id_cliente'], PDO::PARAM_INT);
         $stmtV->bindParam(':total', $total);
         $stmtV->bindParam(':id_usuario', $id_usuario, PDO::PARAM_INT);
+        $stmtV->bindParam(':metodo_pago', $metodo_pago);
         $stmtV->execute();
         $id_venta_servicio = $conexion->lastInsertId();
 
@@ -88,27 +91,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmtD->bindParam(':subtotal', $total);
         $stmtD->execute();
 
-        // C. Actualizar Estado del Servicio (CORREGIDO: SIN CAMPO SALDO)
-        if ($nuevo_estado === 'Pagado') {
-             // Solo paga, no se entrega (no actualizamos fecha_entrega)
-             $sqlUpdate = "UPDATE servicios SET estado = :estado WHERE id = :id";
-        } else {
-             // Paga y se entrega (actualizamos fechas)
-             $sqlUpdate = "UPDATE servicios SET estado = :estado, fecha_completado = NOW(), fecha_entrega = NOW() WHERE id = :id";
+        // C. Actualizar Estado del Servicio
+        $sqlUpdate = "UPDATE servicios SET estado = :estado";
+        
+        // Mapeo lógico de estados
+        $estado_db = ($nuevo_estado == 'Pagado y Entregado') ? 'ENTREGADO' : 'PAGADO';
+
+        if ($estado_db === 'ENTREGADO') {
+             $sqlUpdate .= ", fecha_completado = NOW(), fecha_entrega = NOW()";
         }
+        
+        $sqlUpdate .= " WHERE id = :id";
 
         $stmtU = $conexion->prepare($sqlUpdate);
-        $stmtU->bindParam(':estado', $nuevo_estado); 
+        $stmtU->bindParam(':estado', $estado_db); 
         $stmtU->bindParam(':id', $id_servicio, PDO::PARAM_INT);
         $stmtU->execute();
 
         $conexion->commit();
         
-        echo "<script>
-                alert('¡Pago registrado con éxito! Ticket #$id_venta_servicio');
-                window.location.href = 'servicios.php';
-              </script>";
-        exit;
+        // Asignamos el ID a la variable para mostrar la pantalla de éxito abajo
+        $ticket_id_generado = $id_venta_servicio;
 
     } catch (PDOException $e) {
         $conexion->rollBack();
@@ -124,6 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cobrar Servicio</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
     <link rel="stylesheet" href="assets/css/theme-oscuro.css" />
     <script>
         (function() {
@@ -141,59 +145,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 10px;
             box-shadow: 0 0 20px rgba(0,0,0,0.2);
         }
-        .monto-big { font-size: 2.5rem; font-weight: 800; color: #2ecc71; text-align: center; margin: 20px 0; }
+        .monto-big { font-size: 2.5rem; font-weight: 800; color: #198754; text-align: center; margin: 20px 0; }
         .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #444; }
+        /* Ajuste para modo oscuro */
+        html[data-bs-theme="dark"] .monto-big { color: #2ecc71; }
     </style>
 </head>
 <body>
 <?php include 'includes/navbar.php'; ?>
 
 <div class="container">
-    <?php if ($error): ?>
-        <div class="alert alert-danger mt-3"><?php echo htmlspecialchars($error); ?></div>
+    
+    <?php if ($ticket_id_generado): ?>
+        <div class="card card-cobro text-center">
+            <div class="card-body p-5">
+                <div class="mb-4">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h3 class="mb-3">¡Pago Registrado!</h3>
+                <p>El ticket de servicio se ha generado correctamente.</p>
+                
+                <div class="d-grid gap-3 mt-4">
+                    <a href="generar_ticket_final.php?id=<?php echo $ticket_id_generado; ?>" target="_blank" class="btn btn-primary btn-lg">
+                        <i class="bi bi-printer"></i> Abrir Ticket PDF
+                    </a>
+                    <a href="servicios.php" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Volver a Servicios
+                    </a>
+                </div>
+
+                <script>
+                    window.onload = function() {
+                        // Intentamos abrir el PDF automáticamente en otra pestaña
+                        const url = "generar_ticket_final.php?id=<?php echo $ticket_id_generado; ?>";
+                        const win = window.open(url, '_blank');
+                        if (!win) {
+                            // Si el navegador lo bloqueó, el usuario usará el botón azul.
+                            console.log("Popup bloqueado, usar botón manual.");
+                        }
+                    };
+                </script>
+            </div>
+        </div>
+    
+    <?php else: ?>
+
+        <?php if ($error): ?>
+            <div class="alert alert-danger mt-3"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+
+        <div class="card card-cobro">
+            <div class="card-header bg-success text-white text-center">
+                <h4 class="mb-0">Cobrar Servicio #<?php echo $servicio['id']; ?></h4>
+            </div>
+            <div class="card-body p-4">
+                
+                <div class="text-center mb-3">
+                    <h5><?php echo htmlspecialchars($servicio['nombre_cliente'] . ' ' . $servicio['apellido_cliente']); ?></h5>
+                    <small class="text-muted">DNI: <?php echo htmlspecialchars($servicio['dni_cliente']); ?></small>
+                </div>
+
+                <div class="info-row">
+                    <span>Producto:</span>
+                    <strong><?php echo htmlspecialchars($servicio['producto']); ?></strong>
+                </div>
+                <div class="info-row">
+                    <span>Trabajo:</span>
+                    <span><?php echo htmlspecialchars($servicio['descripcion']); ?></span>
+                </div>
+                
+                <div class="monto-big">
+                    $ <?php echo number_format($monto_a_pagar, 2); ?>
+                </div>
+
+                <form method="POST">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Método de Pago:</label>
+                        <select name="metodo_pago" class="form-select">
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+                            <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+                            <option value="Transferencia">Transferencia / QR</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Acción:</label>
+                        <select name="estado_final" class="form-select">
+                            <option value="Pagado y Entregado">Cobrar y Entregar (Finalizar)</option>
+                            <option value="Pagado">Solo Cobrar (Queda en taller)</option>
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-cash-coin"></i> CONFIRMAR PAGO
+                        </button>
+                        <a href="servicios.php" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+
+            </div>
+        </div>
     <?php endif; ?>
-
-    <div class="card card-cobro">
-        <div class="card-header bg-success text-white text-center">
-            <h4 class="mb-0">Cobrar Servicio #<?php echo $servicio['id']; ?></h4>
-        </div>
-        <div class="card-body p-4">
-            
-            <div class="text-center mb-3">
-                <h5><?php echo htmlspecialchars($servicio['nombre_cliente'] . ' ' . $servicio['apellido_cliente']); ?></h5>
-                <small class="text-muted">DNI: <?php echo htmlspecialchars($servicio['dni_cliente']); ?></small>
-            </div>
-
-            <div class="info-row">
-                <span>Joya/Producto:</span>
-                <strong><?php echo htmlspecialchars($servicio['producto']); ?></strong>
-            </div>
-            <div class="info-row">
-                <span>Trabajo:</span>
-                <span><?php echo htmlspecialchars($servicio['descripcion']); ?></span>
-            </div>
-            
-            <div class="monto-big">
-                $ <?php echo number_format($monto_a_pagar, 2); ?>
-            </div>
-
-            <form method="POST">
-                <div class="mb-3">
-                    <label class="form-label">Acción:</label>
-                    <select name="estado_final" class="form-select">
-                        <option value="Pagado y Entregado">Cobrar y Entregar (Finalizar)</option>
-                        <option value="Pagado">Solo Cobrar (Queda en taller)</option>
-                    </select>
-                </div>
-
-                <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-success btn-lg">CONFIRMAR PAGO</button>
-                    <a href="servicios.php" class="btn btn-outline-secondary">Cancelar</a>
-                </div>
-            </form>
-
-        </div>
-    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
