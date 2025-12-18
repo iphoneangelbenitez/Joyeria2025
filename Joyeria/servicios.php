@@ -5,7 +5,6 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-
 /* Compatibilidad de sesión */
 if (!isset($_SESSION['id_usuario']) && isset($_SESSION['user_id'])) {
     $_SESSION['id_usuario'] = $_SESSION['user_id'];
@@ -48,9 +47,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fechaEntregaEstimada = $_POST['fecha_entrega_estimada'] ?? null;
             $costoServicio = (float)($_POST['costo_servicio'] ?? 0);
 
+            // Estado inicial siempre Pendiente
+            $estadoInicial = 'PENDIENTE';
+
             $consultaCrear = "INSERT INTO servicios 
-                (id_cliente, tipo, producto, descripcion, fecha_entrega_estimada, costo_servicio) 
-                VALUES (:id_cliente, :tipo, :producto, :descripcion, :fecha_entrega_estimada, :costo_servicio)";
+                (id_cliente, tipo, producto, descripcion, fecha_entrega_estimada, costo_servicio, estado, fecha_ingreso) 
+                VALUES (:id_cliente, :tipo, :producto, :descripcion, :fecha_entrega_estimada, :costo_servicio, :estado, NOW())";
+            
             $sentenciaCrear = $conexion->prepare($consultaCrear);
             $sentenciaCrear->bindParam(':id_cliente', $idCliente, PDO::PARAM_INT);
             $sentenciaCrear->bindParam(':tipo', $tipo);
@@ -58,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sentenciaCrear->bindParam(':descripcion', $descripcion);
             $sentenciaCrear->bindParam(':fecha_entrega_estimada', $fechaEntregaEstimada);
             $sentenciaCrear->bindParam(':costo_servicio', $costoServicio);
+            $sentenciaCrear->bindParam(':estado', $estadoInicial);
 
             if ($sentenciaCrear->execute()) {
                 $mensaje = "Servicio creado exitosamente.";
@@ -69,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    /* Actualizar estado del servicio */
+    /* Actualizar estado del servicio (Lógica manual) */
     if (isset($_POST['actualizar_estado'])) {
         try {
             $idServicio = (int)($_POST['id'] ?? 0);
@@ -78,9 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $consultaEstado = "UPDATE servicios SET estado = :estado";
             if ($estado === 'COMPLETADO') {
                 $consultaEstado .= ", fecha_completado = NOW()";
-            } else {
-                $consultaEstado .= ", fecha_completado = NULL";
             }
+            
             $consultaEstado .= " WHERE id = :id";
 
             $sentenciaEstado = $conexion->prepare($consultaEstado);
@@ -143,6 +146,7 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
     <link rel="stylesheet" href="assets/css/theme-oscuro.css" />
+    <link rel="stylesheet" href="assets/css/servicio.css" />
 
 <script>
     (function() {
@@ -176,8 +180,6 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
             <div class="alert alert-success"><?php echo htmlspecialchars($mensaje); ?></div>
         <?php endif; ?>
 
-
-        <?php if ($esAdministrador): ?>
         
         <div class="row mb-3">
             <div class="col-12">
@@ -253,7 +255,7 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
                 </div> 
             </div>
         </div>
-        <?php endif; ?>
+        
 
         <div class="row">
             <div class="col-12">
@@ -273,7 +275,8 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
                                         <option value="">Todos los estados</option>
                                         <option value="PENDIENTE"   <?php echo ($filtroEstado==='PENDIENTE')?'selected':''; ?>>Pendiente</option>
                                         <option value="EN_PROCESO"  <?php echo ($filtroEstado==='EN_PROCESO')?'selected':''; ?>>En Proceso</option>
-                                        <option value="COMPLETADO"  <?php echo ($filtroEstado==='COMPLETADO')?'selected':''; ?>>Completado</option>
+                                        <option value="COMPLETADO"  <?php echo ($filtroEstado==='COMPLETADO')?'selected':''; ?>>Completado (Listo)</option>
+                                        <option value="ENTREGADO"   <?php echo ($filtroEstado==='ENTREGADO')?'selected':''; ?>>Entregado</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4">
@@ -296,8 +299,12 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
                                     $tipoClase = ($servicio['tipo'] === 'MANTENIMIENTO') ? 'servicio-mantenimiento' : 'servicio-reparacion';
                                     $estado = $servicio['estado'];
                                     $claseEstado = 'pendiente'; $textoEstado = 'Pendiente';
+                                    
+                                    // Mapeo de estados para colores CSS
                                     if ($estado === 'EN_PROCESO') { $claseEstado = 'proceso'; $textoEstado = 'En Proceso'; }
-                                    if ($estado === 'COMPLETADO') { $claseEstado = 'completado'; $textoEstado = 'Completado'; }
+                                    if ($estado === 'COMPLETADO') { $claseEstado = 'completado'; $textoEstado = 'Listo para retirar'; }
+                                    if ($estado === 'Pagado y Entregado' || $estado === 'Entregado') { $claseEstado = 'entregado'; $textoEstado = 'Entregado'; }
+                                    if ($estado === 'Pagado') { $claseEstado = 'pagado'; $textoEstado = 'Pagado (En taller)'; }
                                 ?>
                                 <div class="servicio-item <?php echo $tipoClase; ?>" 
                                      data-dni="<?php echo htmlspecialchars($servicio['cliente_dni']); ?>"
@@ -305,7 +312,7 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
 
                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                         <div>
-                                            <h6 class="mb-1"><?php echo htmlspecialchars($servicio['producto']); ?></h6>
+                                            <h6 class="mb-1">#<?php echo $servicio['id']; ?> - <?php echo htmlspecialchars($servicio['producto']); ?></h6>
                                             <p class="mb-1"><strong>Cliente:</strong>
                                                 <?php echo htmlspecialchars($servicio['cliente_apellido'] . ', ' . $servicio['cliente_nombre']); ?>
                                                 (DNI: <?php echo htmlspecialchars($servicio['cliente_dni']); ?>)
@@ -315,32 +322,56 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
                                             </p>
                                             <p class="mb-1"><strong>Descripción:</strong> <?php echo htmlspecialchars($servicio['descripcion']); ?></p>
                                             <p class="mb-1"><strong>Fecha de Ingreso:</strong> <?php echo date('d/m/Y', strtotime($servicio['fecha_ingreso'])); ?></p>
+                                            
                                             <?php if (!empty($servicio['fecha_entrega_estimada'])): ?>
                                                 <p class="mb-1"><strong>Entrega Estimada:</strong> <?php echo date('d/m/Y', strtotime($servicio['fecha_entrega_estimada'])); ?></p>
                                             <?php endif; ?>
+                                            
                                             <?php if ((float)$servicio['costo_servicio'] > 0): ?>
                                                 <p class="mb-1"><strong>Costo:</strong> $<?php echo number_format((float)$servicio['costo_servicio'], 2); ?></p>
                                             <?php endif; ?>
                                         </div>
                                         <div class="text-end">
-                                            <span class="estado-badge estado-<?php echo $claseEstado; ?>"><?php echo $textoEstado; ?></span>
+                                            <span class="estado-badge estado-<?php echo $claseEstado; ?>" 
+                                                  style="padding: 5px 10px; border-radius: 15px; font-weight: bold; font-size: 0.9em; 
+                                                  <?php 
+                                                    if($claseEstado=='entregado') echo 'background:#28a745; color:white;';
+                                                    elseif($claseEstado=='completado') echo 'background:#ffc107; color:black;';
+                                                    elseif($claseEstado=='proceso') echo 'background:#17a2b8; color:white;';
+                                                    else echo 'background:#6c757d; color:white;';
+                                                  ?>">
+                                                <?php echo $textoEstado; ?>
+                                            </span>
                                             <?php if (!empty($servicio['fecha_completado'])): ?>
-                                                <p class="mb-0 mt-1"><small>Completado: <?php echo date('d/m/Y', strtotime($servicio['fecha_completado'])); ?></small></p>
+                                                <p class="mb-0 mt-1"><small>Terminado: <?php echo date('d/m/Y', strtotime($servicio['fecha_completado'])); ?></small></p>
+                                            <?php endif; ?>
+                                            <?php if (!empty($servicio['fecha_entrega'])): ?>
+                                                <p class="mb-0 mt-1"><small>Entregado: <?php echo date('d/m/Y', strtotime($servicio['fecha_entrega'])); ?></small></p>
                                             <?php endif; ?>
                                         </div>
                                     </div>
 
-                                    <?php if ($esAdministrador && $servicio['estado'] !== 'COMPLETADO'): ?>
-                                    <div class="mt-3">
-                                        <form method="post" action="" class="d-inline">
-                                            <input type="hidden" name="id" value="<?php echo (int)$servicio['id']; ?>">
-                                            <input type="hidden" name="estado" value="<?php echo ($servicio['estado'] === 'PENDIENTE') ? 'EN_PROCESO' : 'COMPLETADO'; ?>">
-                                            <button type="submit" name="actualizar_estado" class="btn btn-sm btn-primary">
-                                                <?php echo ($servicio['estado'] === 'PENDIENTE') ? 'Marcar como En Proceso' : 'Marcar como Completado'; ?>
-                                            </button>
-                                        </form>
+                                    <div class="mt-3 d-flex flex-wrap gap-2">
+                                        <?php if ($servicio['estado'] !== 'COMPLETADO' && $servicio['estado'] !== 'Pagado y Entregado' && $servicio['estado'] !== 'Entregado'): ?>
+                                            <form method="post" action="" class="d-inline">
+                                                <input type="hidden" name="id" value="<?php echo (int)$servicio['id']; ?>">
+                                                <input type="hidden" name="estado" value="<?php echo ($servicio['estado'] === 'PENDIENTE') ? 'EN_PROCESO' : 'COMPLETADO'; ?>">
+                                                <button type="submit" name="actualizar_estado" class="btn btn-sm btn-outline-primary">
+                                                    <?php echo ($servicio['estado'] === 'PENDIENTE') ? '<i class="bi bi-play-fill"></i> Iniciar Trabajo' : '<i class="bi bi-check-lg"></i> Marcar Terminado'; ?>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+
+                                        <?php 
+                                        $estadosBloqueados = ['Pagado y Entregado', 'Entregado', 'Cancelado'];
+                                        if (!in_array($servicio['estado'], $estadosBloqueados)): 
+                                        ?>
+                                            <a href="ventas_servicios.php?id=<?php echo $servicio['id']; ?>" 
+                                               class="btn btn-sm btn-success text-white">
+                                                <i class="bi bi-cart-check"></i> Cobrar / Entregar
+                                            </a>
+                                        <?php endif; ?>
                                     </div>
-                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                             
@@ -356,7 +387,10 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
 
-    </div></div><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -382,47 +416,40 @@ document.addEventListener('DOMContentLoaded', function() {
     const noResultadosMsg = document.getElementById('no-resultados-js');
 
     function filtrarServicios() {
-        // Si no existe el div de 'no-resultados' (porque no había items), no hace nada.
-        if (!noResultadosMsg) {
-            return;
-        }
+        if (!noResultadosMsg) return;
 
         const filtroDni = filtroDniInput.value.toLowerCase().trim();
-        const filtroEstado = filtroEstadoInput.value; // 'PENDIENTE', 'EN_PROCESO', ''
+        const filtroEstado = filtroEstadoInput.value; 
         let visiblesCount = 0;
 
         itemsServicio.forEach(function(item) {
             const itemDni = item.dataset.dni.toLowerCase();
             const itemEstado = item.dataset.estado;
 
-            // Comprueba si el DNI coincide (o si el filtro DNI está vacío)
             const dniMatch = (filtroDni === '') || itemDni.includes(filtroDni);
-            // Comprueba si el Estado coincide (o si el filtro Estado está vacío)
+            // Ajuste para el filtro de estado: si eliges "COMPLETADO", también muestra los entregados si quieres,
+            // o se mantiene estricto. Aquí es coincidencia exacta o vacío.
             const estadoMatch = (filtroEstado === '') || (itemEstado === filtroEstado);
 
             if (dniMatch && estadoMatch) {
-                item.style.display = ''; // Muestra el item
+                item.style.display = ''; 
                 visiblesCount++;
             } else {
-                item.style.display = 'none'; // Oculta el item
+                item.style.display = 'none';
             }
         });
 
-        // Muestra u oculta el mensaje de 'no resultados'
         noResultadosMsg.style.display = (visiblesCount === 0) ? 'block' : 'none';
     }
 
-    // Añadir los 'listeners' a los inputs de filtro
     if (filtroDniInput) {
-        // 'input' se dispara con cada tecla presionada
         filtroDniInput.addEventListener('input', filtrarServicios);
     }
     if (filtroEstadoInput) {
-        // 'change' se dispara cuando se selecciona una nueva opción
         filtroEstadoInput.addEventListener('change', filtrarServicios);
     }
 });
 </script>
- <script src="assets/js/boton-oscuro.js"></script>
+<script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>
