@@ -19,7 +19,7 @@ $error = '';
 /* ===== 2. PROCESAR FORMULARIOS (POST) ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // A. CREAR NUEVO TIPO DE SERVICIO (NUEVO BLOQUE)
+    // A. CREAR NUEVO TIPO DE SERVICIO
     if (isset($_POST['guardar_nuevo_tipo'])) {
         try {
             $nuevoTipo = strtoupper(trim($_POST['nuevo_tipo_nombre']));
@@ -96,15 +96,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-/* ===== 3. OBTENER DATOS (SELECTS) ===== */
+/* ===== 3. OBTENER DATOS (SELECTS Y FILTROS) ===== */
 
-// a. Obtener Tipos de Servicio (Desde la BD ahora)
+// a. Obtener Tipos de Servicio
 $stmtTipos = $conexion->query("SELECT * FROM tipos_servicio ORDER BY nombre ASC");
 $listaTipos = $stmtTipos->fetchAll(PDO::FETCH_ASSOC);
 
 // b. Filtros y Lista Principal
 $filtroEstado = $_GET['estado'] ?? '';
 $filtroDni = $_GET['dni'] ?? '';
+$filtroOrden = $_GET['orden'] ?? ''; // --- NUEVO: Capturar filtro por Orden ID
 
 $consultaServicios = "SELECT s.*, c.nombre AS cliente_nombre, c.apellido AS cliente_apellido, c.dni AS cliente_dni,
                       (SELECT id_venta_servicio FROM detalle_servicios_ventas WHERE id_servicio = s.id LIMIT 1) as id_ticket_pago 
@@ -112,6 +113,12 @@ $consultaServicios = "SELECT s.*, c.nombre AS cliente_nombre, c.apellido AS clie
                       INNER JOIN clientes c ON s.id_cliente = c.id";
 $where = [];
 $params = [];
+
+// --- NUEVO: Lógica de filtrado por Orden ---
+if ($filtroOrden !== '') {
+    $where[] = "s.id = :id";
+    $params[':id'] = (int)$filtroOrden;
+}
 
 if ($filtroEstado !== '') {
     $where[] = "s.estado LIKE :estado"; 
@@ -121,6 +128,7 @@ if ($filtroDni !== '') {
     $where[] = "c.dni LIKE :dni";
     $params[':dni'] = "%$filtroDni%";
 }
+
 if ($where) {
     $consultaServicios .= " WHERE " . implode(" AND ", $where);
 }
@@ -142,6 +150,9 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes ORD
     <title>Servicios - Sistema de Joyería</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
+    
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+    
     <link rel="stylesheet" href="assets/css/theme-oscuro.css" />
     <link rel="stylesheet" href="assets/css/servicio.css" /> 
 
@@ -211,12 +222,13 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes ORD
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label class="form-label">Cliente</label>
-                                            <select class="form-select" name="id_cliente" required>
-                                                <option value="">Seleccionar cliente</option>
+                                            <label for="id_cliente" class="form-label">Cliente (Buscar por DNI o Nombre)</label>
+                                            
+                                            <select id="id_cliente" name="id_cliente" required placeholder="🔍 Escriba nombre o DNI...">
+                                                <option value="">Escriba para buscar cliente...</option>
                                                 <?php foreach ($clientes as $cliente): ?>
                                                     <option value="<?php echo (int)$cliente['id']; ?>">
-                                                        <?php echo htmlspecialchars($cliente['apellido'] . ', ' . $cliente['nombre'] . ' (' . $cliente['dni'] . ')'); ?>
+                                                        <?php echo htmlspecialchars($cliente['apellido'] . ', ' . $cliente['nombre'] . ' (DNI: ' . $cliente['dni'] . ')'); ?>
                                                     </option>
                                                 <?php endforeach; ?>
                                             </select>
@@ -273,14 +285,20 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes ORD
                 <div class="servicios-card">
                     <div class="servicios-card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Lista de Servicios</h5>
-                        <span class="badge bg-primary">Total: <?php echo count($servicios); ?></span>
+                        <span class="badge bg-dark">Total: <?php echo count($servicios); ?></span>
                     </div>
                     <div class="card-body">
 
                         <div class="filtros-container mb-4">
                             <h5><i class="bi bi-funnel me-2"></i>Filtros</h5>
                             <form method="get" action="servicios.php" class="row g-3">
-                                <div class="col-md-4">
+                                
+                                <div class="col-md-3">
+                                    <label class="form-label">N° Orden</label>
+                                    <input type="number" class="form-control" name="orden" placeholder="Ej: 15" value="<?php echo htmlspecialchars($filtroOrden); ?>">
+                                </div>
+
+                                <div class="col-md-3">
                                     <label class="form-label">Estado</label>
                                     <select class="form-select" name="estado">
                                         <option value="">Todos</option>
@@ -291,11 +309,11 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes ORD
                                         <option value="ENTREGADO" <?php echo ($filtroEstado==='ENTREGADO')?'selected':''; ?>>Entregado</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label">DNI Cliente</label>
                                     <input type="text" class="form-control" name="dni" value="<?php echo htmlspecialchars($filtroDni); ?>">
                                 </div>
-                                <div class="col-md-4 d-flex align-items-end">
+                                <div class="col-md-3 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary me-2">Filtrar</button>
                                     <a href="servicios.php" class="btn btn-secondary">Limpiar</a>
                                 </div>
@@ -307,8 +325,7 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes ORD
                         <?php if (count($servicios) > 0): ?>
                             <?php foreach ($servicios as $servicio): ?>
                                 <?php
-                                    // Determinar estilo según tipo (ahora dinámico, usamos un hash simple para color o default)
-                                    $tipoClase = 'servicio-reparacion'; // Default
+                                    $tipoClase = 'servicio-reparacion'; 
                                     if(strpos($servicio['tipo'], 'MANTENIMIENTO') !== false) $tipoClase = 'servicio-mantenimiento';
                                     
                                     $estadoDB = $servicio['estado']; 
@@ -470,6 +487,31 @@ $clientes = $conexion->query("SELECT id, nombre, apellido, dni FROM clientes ORD
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var elCliente = document.getElementById('id_cliente');
+        
+        // Inicializar TomSelect si existe el campo
+        if (elCliente) {
+            new TomSelect(elCliente, {
+                create: false,
+                placeholder: "🔍 Buscar por Nombre o DNI...",
+                allowEmptyOption: true,
+                maxOptions: 100, // Límite para rendimiento
+                sortField: {
+                    field: "text",
+                    direction: "asc"
+                },
+                plugins: ['clear_button'], // Botón para limpiar selección
+                onDelete: function(values) {
+                    return confirm('¿Quitar cliente seleccionado?');
+                }
+            });
+        }
+    });
+</script>
 <script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>

@@ -1,181 +1,158 @@
 <?php
 // generar_reporte_servicios_pdf.php
 session_start();
+require_once 'vendor/autoload.php';
+require_once "config/database.php";
+
+// 1. Validar sesión
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-require_once "config/database.php";
 $database = new Database();
 $db = $database->getConnection();
 
-// 1. Obtener parámetros de filtro (igual que en reportes_servicios.php)
+// 2. Obtener filtros desde la URL
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
-$tipo_servicio = $_GET['tipo_servicio'] ?? '';
-$estado_servicio = $_GET['estado_servicio'] ?? '';
-$dni_cliente = $_GET['dni_cliente'] ?? '';
+$estado_filtro = $_GET['estado'] ?? 'TODOS';
 
-// 2. Construir y ejecutar la consulta (exactamente la misma que para "Detalle de Servicios")
-$query_servicios = "SELECT s.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido, 
-                           c.dni as cliente_dni, c.telefono as cliente_telefono,
-                           DATEDIFF(s.fecha_entrega_estimada, s.fecha_ingreso) as dias_estimados,
-                           DATEDIFF(COALESCE(s.fecha_completado, NOW()), s.fecha_ingreso) as dias_reales
-                    FROM servicios s
-                    INNER JOIN clientes c ON s.id_cliente = c.id
-                    WHERE s.fecha_ingreso BETWEEN :fecha_inicio AND :fecha_fin";
+// 3. Construir Consulta SQL (Misma lógica que en la vista)
+$sql = "SELECT s.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido
+        FROM servicios s
+        INNER JOIN clientes c ON s.id_cliente = c.id
+        WHERE s.fecha_ingreso BETWEEN :fecha_inicio AND :fecha_fin";
 
 $params = [
     ':fecha_inicio' => $fecha_inicio . ' 00:00:00',
     ':fecha_fin' => $fecha_fin . ' 23:59:59'
 ];
 
-// Aplicar filtros adicionales
-if (!empty($tipo_servicio)) {
-    $query_servicios .= " AND s.tipo = :tipo_servicio";
-    $params[':tipo_servicio'] = $tipo_servicio;
+// --- AQUI ESTA LA CORRECCIÓN CLAVE ---
+if ($estado_filtro !== 'TODOS') {
+    if ($estado_filtro === 'PAGADOS_ENTREGADOS') {
+        // Lógica especial para sumar ambos estados
+        $sql .= " AND s.estado IN ('PAGADO', 'ENTREGADO')";
+    } else {
+        // Filtro normal
+        $sql .= " AND s.estado = :estado";
+        $params[':estado'] = $estado_filtro;
+    }
 }
 
-if (!empty($estado_servicio)) {
-    $query_servicios .= " AND s.estado = :estado_servicio";
-    $params[':estado_servicio'] = $estado_servicio;
-}
+$sql .= " ORDER BY s.fecha_ingreso DESC";
 
-if (!empty($dni_cliente)) {
-    $query_servicios .= " AND c.dni LIKE :dni_cliente";
-    $params[':dni_cliente'] = "%$dni_cliente%";
-}
-
-$query_servicios .= " ORDER BY s.fecha_ingreso DESC";
-
-// Preparar y ejecutar consulta de servicios
-$stmt_servicios = $db->prepare($query_servicios);
+$stmt = $db->prepare($sql);
 foreach ($params as $key => $value) {
-    $stmt_servicios->bindValue($key, $value);
+    $stmt->bindValue($key, $value);
 }
-$stmt_servicios->execute();
-$servicios = $stmt_servicios->fetchAll(PDO::FETCH_ASSOC);
-?>
+$stmt->execute();
+$servicios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte Detallado de Servicios</title>
-    <style>
-        /* ESTILOS COPIADOS DE reporte_movimientos_print.php */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1, h2 {
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 10px;
-        }
-        .filtros {
-            margin-bottom: 20px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 0.9em;
-        }
-        .filtros p {
-            margin: 5px 0;
-        }
-        .filtros strong {
-            display: inline-block;
-            width: 150px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            font-size: 0.8em; /* Ajustado para que quepan más columnas */
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f4f4f4;
-        }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        @media print {
-            body {
-                margin: 0;
-            }
-            .filtros {
-                border: none;
-            }
-            button {
-                display: none;
-            }
-            table {
-                font-size: 0.75em; /* Aún más pequeño para impresión si es necesario */
-            }
-        }
-    </style>
-</head>
-<body onload="window.print()"> <button onclick="window.print()" style="float: right; padding: 10px; margin-bottom: 10px;">Imprimir</button>
+// 4. Calcular Totales para el Resumen
+$total_ingresos = 0;
+$cantidad_servicios = count($servicios);
+
+foreach ($servicios as $s) {
+    if (in_array($s['estado'], ['PAGADO', 'ENTREGADO'])) {
+        $total_ingresos += (float)$s['costo_servicio'];
+    }
+}
+
+// 5. Configuración de mPDF
+$mpdf = new \Mpdf\Mpdf([
+    'mode' => 'utf-8',
+    'format' => 'A4-L', // Apaisado (Landscape) para que entre mejor la tabla
+    'margin_left' => 10,
+    'margin_right' => 10,
+    'margin_top' => 10,
+    'margin_bottom' => 10
+]);
+
+// 6. Estilos CSS
+$css = '
+<style>
+    body { font-family: sans-serif; font-size: 10pt; color: #333; }
+    h1 { text-align: center; color: #000; margin-bottom: 5px; }
+    .subtitulo { text-align: center; color: #666; font-size: 10pt; margin-bottom: 20px; }
     
-    <h1>Reporte Detallado de Servicios</h1>
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background-color: #333; color: #fff; padding: 8px; font-size: 9pt; border: 1px solid #333; }
+    td { border: 1px solid #ccc; padding: 6px; font-size: 9pt; }
+    
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .badge { padding: 2px 5px; border-radius: 3px; font-weight: bold; color: #fff; font-size: 8pt; }
+    
+    .bg-PENDIENTE { background-color: #6c757d; }
+    .bg-EN_PROCESO { background-color: #0d6efd; }
+    .bg-TERMINADO { background-color: #ffc107; color: #000; }
+    .bg-PAGADO { background-color: #0dcaf0; color: #000; }
+    .bg-ENTREGADO { background-color: #198754; }
+    .bg-CANCELADO { background-color: #dc3545; }
+    
+    .resumen { margin-top: 20px; border: 1px solid #000; padding: 10px; width: 300px; float: right; }
+</style>
+';
 
-    <div class="filtros">
-        <h2>Filtros Aplicados</h2>
-        <p><strong>Rango de Fechas:</strong> <?php echo htmlspecialchars(date('d/m/Y', strtotime($fecha_inicio))); ?> al <?php echo htmlspecialchars(date('d/m/Y', strtotime($fecha_fin))); ?></p>
-        <p><strong>Tipo de Servicio:</strong> <?php echo !empty($tipo_servicio) ? htmlspecialchars($tipo_servicio) : 'Todos'; ?></p>
-        <p><strong>Estado:</strong> <?php echo !empty($estado_servicio) ? htmlspecialchars($estado_servicio) : 'Todos'; ?></p>
-        <p><strong>DNI Cliente:</strong> <?php echo !empty($dni_cliente) ? htmlspecialchars($dni_cliente) : 'Todos'; ?></p>
+// 7. Contenido HTML
+$html = '
+    <h1>Reporte de Servicios de Taller</h1>
+    <div class="subtitulo">
+        Periodo: ' . date('d/m/Y', strtotime($fecha_inicio)) . ' al ' . date('d/m/Y', strtotime($fecha_fin)) . '<br>
+        Filtro de Estado: ' . htmlspecialchars(str_replace('_', ' ', $estado_filtro)) . '
     </div>
 
     <table>
         <thead>
             <tr>
-                <th>Fecha Ingreso</th>
-                <th>Cliente</th>
-                <th>DNI</th>
-                <th>Producto</th>
-                <th>Tipo</th>
-                <th>Estado</th>
-                <th>Entrega Estimada</th>
-                <th>Costo</th>
-                <th>Duración</th>
+                <th width="5%">ID</th>
+                <th width="10%">Fecha</th>
+                <th width="20%">Cliente</th>
+                <th width="15%">Tipo</th>
+                <th width="20%">Producto</th>
+                <th width="20%">Descripción</th>
+                <th width="10%">Estado</th>
+                <th width="10%">Costo</th>
             </tr>
         </thead>
-        <tbody>
-            <?php if (count($servicios) > 0): ?>
-                <?php foreach ($servicios as $servicio): ?>
-                    <tr>
-                        <td><?php echo date('d/m/Y', strtotime($servicio['fecha_ingreso'])); ?></td>
-                        <td><?php echo htmlspecialchars($servicio['cliente_apellido'] . ', ' . $servicio['cliente_nombre']); ?></td>
-                        <td><?php echo htmlspecialchars($servicio['cliente_dni']); ?></td>
-                        <td><?php echo htmlspecialchars($servicio['producto']); ?></td>
-                        <td><?php echo htmlspecialchars($servicio['tipo']); ?></td>
-                        <td><?php echo htmlspecialchars($servicio['estado']); ?></td>
-                        <td><?php echo date('d/m/Y', strtotime($servicio['fecha_entrega_estimada'])); ?></td>
-                        <td>$<?php echo number_format($servicio['costo_servicio'], 2); ?></td>
-                        <td>
-                            <?php if ($servicio['estado'] == 'COMPLETADO'): ?>
-                                <?php echo $servicio['dias_reales']; ?> días
-                            <?php else: ?>
-                                <em>En curso</em>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <tr>
-                    <td colspan="9" style="text-align: center;">No hay servicios que coincidan con los filtros aplicados.</td>
-                </tr>
-            <?php endif; ?>
+        <tbody>';
+
+if (count($servicios) > 0) {
+    foreach ($servicios as $s) {
+        $estado = strtoupper($s['estado']);
+        $clase_bg = 'bg-' . str_replace(' ', '_', $estado); // Para manejar espacios si los hay
+        
+        $html .= '
+            <tr>
+                <td class="text-center">#' . $s['id'] . '</td>
+                <td class="text-center">' . date('d/m/y', strtotime($s['fecha_ingreso'])) . '</td>
+                <td>' . htmlspecialchars($s['cliente_apellido'] . ' ' . $s['cliente_nombre']) . '</td>
+                <td class="text-center">' . htmlspecialchars($s['tipo']) . '</td>
+                <td>' . htmlspecialchars($s['producto']) . '</td>
+                <td><small>' . htmlspecialchars(substr($s['descripcion'], 0, 50)) . '...</small></td>
+                <td class="text-center"><span class="badge ' . $clase_bg . '">' . $s['estado'] . '</span></td>
+                <td class="text-right">$' . number_format($s['costo_servicio'], 2) . '</td>
+            </tr>';
+    }
+} else {
+    $html .= '<tr><td colspan="8" class="text-center">No se encontraron registros con los filtros seleccionados.</td></tr>';
+}
+
+$html .= '
         </tbody>
     </table>
 
-</body>
-</html>
+    <div class="resumen">
+        <b>Resumen del Periodo</b><br>
+        <hr>
+        Total de Servicios: <b>' . $cantidad_servicios . '</b><br>
+        Ingresos Recaudados (Pag/Ent): <b>$' . number_format($total_ingresos, 2) . '</b>
+    </div>
+';
+
+// 8. Generar PDF
+$mpdf->WriteHTML($css . $html);
+$mpdf->Output('Reporte_Servicios_' . date('Y-m-d') . '.pdf', 'I');
+?>

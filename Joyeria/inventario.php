@@ -33,23 +33,14 @@ $accion = $_GET['action'] ?? '';
 $idUsuario = isset($_SESSION['id_usuario']) ? (int)$_SESSION['id_usuario'] : (int)$_SESSION['user_id'];
 
 
-
-
 /* Procesar formularios solo si es administrador */
 if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
-
-
-
-
-
-
-
-
-
 
     /* Crear nuevo producto */
     if (isset($_POST['crear_producto'])) {
         try {
+            $conexion->beginTransaction();
+
             $nombre = $_POST['nombre'] ?? '';
             $descripcion = $_POST['descripcion'] ?? '';
             $idCategoria = (int)($_POST['id_categoria'] ?? 0);
@@ -59,101 +50,112 @@ if ($esAdministrador && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $stock = (int)($_POST['stock'] ?? 0); // Stock inicial
             $stockMinimo = (int)($_POST['stock_minimo'] ?? 0);
 
-            // Calcular precio basado en costo y % de ganancia
+            // Calcular precio
             $precio = $costo + ($costo * $porcentajeGanancia / 100);
 
+            // 1. Insertar Producto
             $consultaCrear = "INSERT INTO productos 
                 (nombre, descripcion, id_categoria, id_proveedor, costo, porcentaje_ganancia, precio, stock, stock_minimo) 
                 VALUES 
                 (:nombre, :descripcion, :id_categoria, :id_proveedor, :costo, :porcentaje_ganancia, :precio, :stock, :stock_minimo)";
             $sentenciaCrear = $conexion->prepare($consultaCrear);
-            $sentenciaCrear->bindParam(':nombre', $nombre);
-            $sentenciaCrear->bindParam(':descripcion', $descripcion);
-            $sentenciaCrear->bindParam(':id_categoria', $idCategoria, PDO::PARAM_INT);
-            $sentenciaCrear->bindParam(':id_proveedor', $idProveedor, PDO::PARAM_INT);
-            $sentenciaCrear->bindParam(':costo', $costo);
-            $sentenciaCrear->bindParam(':porcentaje_ganancia', $porcentajeGanancia);
-            $sentenciaCrear->bindParam(':precio', $precio);
-            $sentenciaCrear->bindParam(':stock', $stock, PDO::PARAM_INT);
-            $sentenciaCrear->bindParam(':stock_minimo', $stockMinimo, PDO::PARAM_INT);
+            // Usamos bindValue para asegurar el valor en este instante
+            $sentenciaCrear->bindValue(':nombre', $nombre);
+            $sentenciaCrear->bindValue(':descripcion', $descripcion);
+            $sentenciaCrear->bindValue(':id_categoria', $idCategoria, PDO::PARAM_INT);
+            $sentenciaCrear->bindValue(':id_proveedor', $idProveedor, PDO::PARAM_INT);
+            $sentenciaCrear->bindValue(':costo', $costo);
+            $sentenciaCrear->bindValue(':porcentaje_ganancia', $porcentajeGanancia);
+            $sentenciaCrear->bindValue(':precio', $precio);
+            $sentenciaCrear->bindValue(':stock', $stock, PDO::PARAM_INT);
+            $sentenciaCrear->bindValue(':stock_minimo', $stockMinimo, PDO::PARAM_INT);
 
             if ($sentenciaCrear->execute()) {
                 $idProducto = $conexion->lastInsertId();
 
-                // Registrar movimiento de stock (ALTA) solo si el stock inicial es > 0
+                // 2. Si hay stock inicial > 0, registrar Movimiento y COMPRA
                 if ($stock > 0) {
+                    // A. Registrar movimiento físico
                     $consultaMovimiento = "INSERT INTO movimientos_stock 
                         (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
                         VALUES 
                         (:id_producto, 'ENTRADA', :cantidad, 0, :cantidad_nueva, 'ALTA DE PRODUCTO', :id_usuario)";
                     $sentenciaMovimiento = $conexion->prepare($consultaMovimiento);
-                    $sentenciaMovimiento->bindParam(':id_producto', $idProducto, PDO::PARAM_INT);
-                    $sentenciaMovimiento->bindParam(':cantidad', $stock, PDO::PARAM_INT);
-                    $sentenciaMovimiento->bindParam(':cantidad_nueva', $stock, PDO::PARAM_INT);
-                    $sentenciaMovimiento->bindParam(':id_usuario', $idUsuario, PDO::PARAM_INT);
+                    $sentenciaMovimiento->bindValue(':id_producto', $idProducto, PDO::PARAM_INT);
+                    $sentenciaMovimiento->bindValue(':cantidad', $stock, PDO::PARAM_INT);
+                    $sentenciaMovimiento->bindValue(':cantidad_nueva', $stock, PDO::PARAM_INT);
+                    $sentenciaMovimiento->bindValue(':id_usuario', $idUsuario, PDO::PARAM_INT);
                     $sentenciaMovimiento->execute();
+
+                    // B. Registrar COMPRA AUTOMÁTICA
+                    $totalCompra = $costo * $stock;
+                    
+                    $sqlCompra = "INSERT INTO compras (id_proveedor, fecha_compra, total, forma_pago, id_usuario, observaciones) 
+                                  VALUES (:id_proveedor, NOW(), :total, 'EFECTIVO', :id_usuario, 'Compra automática por Alta de Producto')";
+                    $stmtCompra = $conexion->prepare($sqlCompra);
+                    $stmtCompra->bindValue(':id_proveedor', $idProveedor, PDO::PARAM_INT);
+                    $stmtCompra->bindValue(':total', $totalCompra);
+                    $stmtCompra->bindValue(':id_usuario', $idUsuario, PDO::PARAM_INT);
+                    $stmtCompra->execute();
+                    $idCompra = $conexion->lastInsertId();
+
+                    // C. Registrar DETALLE DE COMPRA (Aquí es donde usaremos bindValue para evitar errores)
+                    $sqlDetalle = "INSERT INTO compra_detalles (id_compra, id_producto, cantidad, costo_unitario, subtotal) 
+                                   VALUES (:id_compra, :id_producto, :cantidad, :costo, :subtotal)";
+                    $stmtDetalle = $conexion->prepare($sqlDetalle);
+                    $stmtDetalle->bindValue(':id_compra', $idCompra, PDO::PARAM_INT);
+                    $stmtDetalle->bindValue(':id_producto', $idProducto, PDO::PARAM_INT);
+                    $stmtDetalle->bindValue(':cantidad', $stock, PDO::PARAM_INT); // Aquí aseguramos que pase 10, no 1
+                    $stmtDetalle->bindValue(':costo', $costo);
+                    $stmtDetalle->bindValue(':subtotal', $totalCompra);
+                    $stmtDetalle->execute();
                 }
 
-                $mensaje = "Producto creado exitosamente.";
+                $conexion->commit();
+                $mensaje = "Producto creado y stock inicial registrado como compra exitosamente.";
             } else {
+                $conexion->rollBack();
                 $error = "Error al crear el producto.";
             }
         } catch (PDOException $e) {
+            if ($conexion->inTransaction()) $conexion->rollBack();
             $error = "Error: " . $e->getMessage();
         }
     }
 
+    /* Crear nueva categoría */
+    if (isset($_POST['guardar_categoria'])) {
+        try {
+            $nombre_cat = $_POST['nombre_categoria'] ?? '';
+            $dias_garantia = (int)($_POST['dias_garantia'] ?? 0);
 
+            if (!empty($nombre_cat)) {
+                $consultaCheck = "SELECT id FROM categorias WHERE nombre = :nombre";
+                $stmtCheck = $conexion->prepare($consultaCheck);
+                $stmtCheck->bindValue(':nombre', $nombre_cat);
+                $stmtCheck->execute();
 
-
-
-
-/* TESTING */
-
-// --- LÓGICA PARA AGREGAR NUEVA CATEGORÍA (Corregido estilo Joyería) ---
-if (isset($_POST['guardar_categoria'])) {
-    try {
-        $nombre_cat = $_POST['nombre_categoria'] ?? '';
-        $dias_garantia = (int)($_POST['dias_garantia'] ?? 0);
-
-        if (!empty($nombre_cat)) {
-            // 1. Verificar si ya existe (Usando $conexion y bindParam)
-            $consultaCheck = "SELECT id FROM categorias WHERE nombre = :nombre";
-            $stmtCheck = $conexion->prepare($consultaCheck);
-            $stmtCheck->bindParam(':nombre', $nombre_cat);
-            $stmtCheck->execute();
-
-            if ($stmtCheck->fetch()) {
-                $error = "Esa categoría ya existe en el sistema.";
-            } else {
-                // 2. Insertar nueva categoría
-                $consultaInsert = "INSERT INTO categorias (nombre, dias_garantia) VALUES (:nombre, :dias)";
-                $stmtInsert = $conexion->prepare($consultaInsert);
-                $stmtInsert->bindParam(':nombre', $nombre_cat);
-                $stmtInsert->bindParam(':dias', $dias_garantia, PDO::PARAM_INT);
-
-                if ($stmtInsert->execute()) {
-                    $mensaje = "Categoría creada exitosamente."; // Usamos $mensaje como en tu otro código
+                if ($stmtCheck->fetch()) {
+                    $error = "Esa categoría ya existe en el sistema.";
                 } else {
-                    $error = "No se pudo guardar la categoría.";
+                    $consultaInsert = "INSERT INTO categorias (nombre, dias_garantia) VALUES (:nombre, :dias)";
+                    $stmtInsert = $conexion->prepare($consultaInsert);
+                    $stmtInsert->bindValue(':nombre', $nombre_cat);
+                    $stmtInsert->bindValue(':dias', $dias_garantia, PDO::PARAM_INT);
+
+                    if ($stmtInsert->execute()) {
+                        $mensaje = "Categoría creada exitosamente.";
+                    } else {
+                        $error = "No se pudo guardar la categoría.";
+                    }
                 }
+            } else {
+                $error = "El nombre es obligatorio.";
             }
-        } else {
-            $error = "El nombre es obligatorio.";
+        } catch (PDOException $e) {
+            $error = "Error de base de datos: " . $e->getMessage();
         }
-    } catch (PDOException $e) {
-        $error = "Error de base de datos: " . $e->getMessage();
     }
-}
-// ------------------------------------------------
-// ------------------------------------
-
-/* TESTING */
-
-
-
-
-
 
     /* Actualizar producto */
     if (isset($_POST['actualizar_producto'])) {
@@ -167,7 +169,6 @@ if (isset($_POST['guardar_categoria'])) {
             $porcentajeGanancia = (float)($_POST['porcentaje_ganancia'] ?? 0);
             $stockMinimo = (int)($_POST['stock_minimo'] ?? 0);
 
-            // Calcular nuevo precio
             $precio = $costo + ($costo * $porcentajeGanancia / 100);
 
             $consultaActualizar = "UPDATE productos 
@@ -176,23 +177,17 @@ if (isset($_POST['guardar_categoria'])) {
                     precio = :precio, stock_minimo = :stock_minimo 
                 WHERE id = :id";
             $sentenciaActualizar = $conexion->prepare($consultaActualizar);
-            $sentenciaActualizar->bindParam(':id', $id, PDO::PARAM_INT);
-            $sentenciaActualizar->bindParam(':nombre', $nombre);
-            $sentenciaActualizar->bindParam(':descripcion', $descripcion);
-            $sentenciaActualizar->bindParam(':id_categoria', $idCategoria, PDO::PARAM_INT);
-            $sentenciaActualizar->bindParam(':id_proveedor', $idProveedor, PDO::PARAM_INT);
-            $sentenciaActualizar->bindParam(':costo', $costo);
-            $sentenciaActualizar->bindParam(':porcentaje_ganancia', $porcentajeGanancia);
-            $sentenciaActualizar->bindParam(':precio', $precio);
-            $sentenciaActualizar->bindParam(':stock_minimo', $stockMinimo, PDO::PARAM_INT);
+            $sentenciaActualizar->bindValue(':id', $id, PDO::PARAM_INT);
+            $sentenciaActualizar->bindValue(':nombre', $nombre);
+            $sentenciaActualizar->bindValue(':descripcion', $descripcion);
+            $sentenciaActualizar->bindValue(':id_categoria', $idCategoria, PDO::PARAM_INT);
+            $sentenciaActualizar->bindValue(':id_proveedor', $idProveedor, PDO::PARAM_INT);
+            $sentenciaActualizar->bindValue(':costo', $costo);
+            $sentenciaActualizar->bindValue(':porcentaje_ganancia', $porcentajeGanancia);
+            $sentenciaActualizar->bindValue(':precio', $precio);
+            $sentenciaActualizar->bindValue(':stock_minimo', $stockMinimo, PDO::PARAM_INT);
 
             if ($sentenciaActualizar->execute()) {
-                
-                // --- MODIFICACIÓN ---
-                // Se eliminó el bloque que actualizaba el stock desde aquí.
-                // El stock ahora solo se maneja por "ajustar_stock" (ingreso/egreso).
-                // --- FIN MODIFICACIÓN ---
-
                 $mensaje = "Producto actualizado exitosamente.";
             } else {
                 $error = "Error al actualizar el producto.";
@@ -202,10 +197,11 @@ if (isset($_POST['guardar_categoria'])) {
         }
     }
 
-    // --- NUEVO BLOQUE ---
     /* Ajustar Stock (Ingreso/Egreso desde Modal) */
     if (isset($_POST['ajustar_stock'])) {
         try {
+            $conexion->beginTransaction(); 
+
             $idProducto = (int)($_POST['id_producto'] ?? 0);
             $tipoMovimiento = $_POST['tipo_ajuste'] ?? ''; // 'ENTRADA' o 'SALIDA'
             $cantidad = (int)($_POST['cantidad'] ?? 0);
@@ -213,84 +209,114 @@ if (isset($_POST['guardar_categoria'])) {
 
             if ($idProducto > 0 && ($tipoMovimiento === 'ENTRADA' || $tipoMovimiento === 'SALIDA') && $cantidad > 0) {
                 
-                // 1. Obtener stock actual
-                $consultaStockActual = "SELECT stock FROM productos WHERE id = :id FOR UPDATE"; // Bloquear fila
+                // 1. Obtener datos actuales
+                $consultaStockActual = "SELECT stock, costo, id_proveedor FROM productos WHERE id = :id FOR UPDATE";
                 $sentenciaStockActual = $conexion->prepare($consultaStockActual);
-                $sentenciaStockActual->bindParam(':id', $idProducto, PDO::PARAM_INT);
+                $sentenciaStockActual->bindValue(':id', $idProducto, PDO::PARAM_INT);
                 $sentenciaStockActual->execute();
-                $filaStock = $sentenciaStockActual->fetch(PDO::FETCH_ASSOC);
-                $stockActual = $filaStock ? (int)$filaStock['stock'] : 0;
+                $productoDatos = $sentenciaStockActual->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$productoDatos) {
+                    throw new Exception("Producto no encontrado.");
+                }
 
+                $stockActual = (int)$productoDatos['stock'];
+                $costoActual = (float)$productoDatos['costo'];
+                $idProveedor = (int)$productoDatos['id_proveedor'];
                 $nuevoStock = $stockActual;
 
-                // 2. Calcular nuevo stock y validar
+                // 2. Calcular nuevo stock
                 if ($tipoMovimiento === 'ENTRADA') {
                     $nuevoStock = $stockActual + $cantidad;
                 } else { // SALIDA
                     if ($cantidad > $stockActual) {
-                        $error = "Error: No se puede registrar una salida mayor al stock actual ($stockActual).";
+                        throw new Exception("No se puede registrar una salida mayor al stock actual.");
                     } else {
                         $nuevoStock = $stockActual - $cantidad;
                     }
                 }
 
-                // 3. Si no hubo error, actualizar e insertar movimiento
-                if (empty($error)) {
-                    // Actualizar stock en productos
-                    $consultaUpdateStock = "UPDATE productos SET stock = :stock WHERE id = :id";
-                    $sentenciaUpdateStock = $conexion->prepare($consultaUpdateStock);
-                    $sentenciaUpdateStock->bindParam(':stock', $nuevoStock, PDO::PARAM_INT);
-                    $sentenciaUpdateStock->bindParam(':id', $idProducto, PDO::PARAM_INT);
-                    
-                    if ($sentenciaUpdateStock->execute()) {
-                        // Registrar movimiento de stock
-                        $consultaMovimiento = "INSERT INTO movimientos_stock 
-                            (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
-                            VALUES (:id_producto, :tipo, :cantidad, :cantidad_anterior, :cantidad_nueva, :motivo, :id_usuario)";
-                        $sentenciaMovimiento = $conexion->prepare($consultaMovimiento);
-                        $sentenciaMovimiento->bindParam(':id_producto', $idProducto, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':tipo', $tipoMovimiento);
-                        $sentenciaMovimiento->bindParam(':cantidad', $cantidad, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':cantidad_anterior', $stockActual, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':cantidad_nueva', $nuevoStock, PDO::PARAM_INT);
-                        $sentenciaMovimiento->bindParam(':motivo', $motivo);
-                        $sentenciaMovimiento->bindParam(':id_usuario', $idUsuario, PDO::PARAM_INT);
-                        $sentenciaMovimiento->execute();
+                // 3. Actualizar tabla productos
+                $consultaUpdateStock = "UPDATE productos SET stock = :stock WHERE id = :id";
+                $sentenciaUpdateStock = $conexion->prepare($consultaUpdateStock);
+                $sentenciaUpdateStock->bindValue(':stock', $nuevoStock, PDO::PARAM_INT);
+                $sentenciaUpdateStock->bindValue(':id', $idProducto, PDO::PARAM_INT);
+                $sentenciaUpdateStock->execute();
 
-                        $mensaje = "Stock actualizado y movimiento registrado exitosamente.";
-                    } else {
-                        $error = "Error al actualizar el stock del producto.";
-                    }
+                // 4. Registrar movimiento
+                $consultaMovimiento = "INSERT INTO movimientos_stock 
+                    (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
+                    VALUES (:id_producto, :tipo, :cantidad, :cantidad_anterior, :cantidad_nueva, :motivo, :id_usuario)";
+                $sentenciaMovimiento = $conexion->prepare($consultaMovimiento);
+                $sentenciaMovimiento->bindValue(':id_producto', $idProducto, PDO::PARAM_INT);
+                $sentenciaMovimiento->bindValue(':tipo', $tipoMovimiento);
+                $sentenciaMovimiento->bindValue(':cantidad', $cantidad, PDO::PARAM_INT);
+                $sentenciaMovimiento->bindValue(':cantidad_anterior', $stockActual, PDO::PARAM_INT);
+                $sentenciaMovimiento->bindValue(':cantidad_nueva', $nuevoStock, PDO::PARAM_INT);
+                $sentenciaMovimiento->bindValue(':motivo', $motivo);
+                $sentenciaMovimiento->bindValue(':id_usuario', $idUsuario, PDO::PARAM_INT);
+                $sentenciaMovimiento->execute();
+
+                // 5. SI ES ENTRADA -> REGISTRAR COMO COMPRA
+                if ($tipoMovimiento === 'ENTRADA') {
+                    $totalCompra = $costoActual * $cantidad;
+                    
+                    // a) Insertar en compras
+                    $sqlCompra = "INSERT INTO compras (id_proveedor, fecha_compra, total, forma_pago, id_usuario, observaciones) 
+                                  VALUES (:id_proveedor, NOW(), :total, 'EFECTIVO', :id_usuario, :observaciones)";
+                    $stmtCompra = $conexion->prepare($sqlCompra);
+                    $obsCompra = "Ingreso de stock manual: " . $motivo;
+                    $stmtCompra->bindValue(':id_proveedor', $idProveedor, PDO::PARAM_INT);
+                    $stmtCompra->bindValue(':total', $totalCompra);
+                    $stmtCompra->bindValue(':id_usuario', $idUsuario, PDO::PARAM_INT);
+                    $stmtCompra->bindValue(':observaciones', $obsCompra);
+                    $stmtCompra->execute();
+                    $idCompra = $conexion->lastInsertId();
+
+                    // b) Insertar en compra_detalles (USANDO bindValue)
+                    $sqlDetalle = "INSERT INTO compra_detalles (id_compra, id_producto, cantidad, costo_unitario, subtotal) 
+                                   VALUES (:id_compra, :id_producto, :cantidad, :costo, :subtotal)";
+                    $stmtDetalle = $conexion->prepare($sqlDetalle);
+                    $stmtDetalle->bindValue(':id_compra', $idCompra, PDO::PARAM_INT);
+                    $stmtDetalle->bindValue(':id_producto', $idProducto, PDO::PARAM_INT);
+                    $stmtDetalle->bindValue(':cantidad', $cantidad, PDO::PARAM_INT); // Cantidad correcta
+                    $stmtDetalle->bindValue(':costo', $costoActual);
+                    $stmtDetalle->bindValue(':subtotal', $totalCompra);
+                    $stmtDetalle->execute();
+                    
+                    $mensaje = "Stock actualizado y COMPRA registrada exitosamente.";
+                } else {
+                    $mensaje = "Stock actualizado (Salida) exitosamente.";
                 }
+
+                $conexion->commit();
 
             } else {
                 $error = "Datos inválidos para el ajuste de stock.";
             }
 
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
+            if ($conexion->inTransaction()) $conexion->rollBack();
             $error = "Error en ajuste de stock: " . $e->getMessage();
         }
     }
-    // --- FIN NUEVO BLOQUE ---
-
 }
 
 /* Ocultar/Mostrar producto (también sólo para administradores) */
 if ($esAdministrador && isset($_GET['toggle']) && isset($_GET['id'])) {
-    // ... (sin cambios en este bloque)
     try {
         $id = (int)$_GET['id'];
         $consultaEstado = "SELECT oculto FROM productos WHERE id = :id";
         $sentenciaEstado = $conexion->prepare($consultaEstado);
-        $sentenciaEstado->bindParam(':id', $id, PDO::PARAM_INT);
+        $sentenciaEstado->bindValue(':id', $id, PDO::PARAM_INT);
         $sentenciaEstado->execute();
         $filaEstado = $sentenciaEstado->fetch(PDO::FETCH_ASSOC);
         $ocultoActual = $filaEstado ? (int)$filaEstado['oculto'] : 0;
         $nuevoEstado = $ocultoActual ? 0 : 1;
         $consultaToggle = "UPDATE productos SET oculto = :oculto WHERE id = :id";
         $sentenciaToggle = $conexion->prepare($consultaToggle);
-        $sentenciaToggle->bindParam(':oculto', $nuevoEstado, PDO::PARAM_INT);
-        $sentenciaToggle->bindParam(':id', $id, PDO::PARAM_INT);
+        $sentenciaToggle->bindValue(':oculto', $nuevoEstado, PDO::PARAM_INT);
+        $sentenciaToggle->bindValue(':id', $id, PDO::PARAM_INT);
         if ($sentenciaToggle->execute()) {
             $accion = $nuevoEstado ? "ocultado" : "mostrado";
             $mensaje = "Producto $accion exitosamente.";
@@ -330,7 +356,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
     $idEditar = (int)$_GET['editar'];
     $consultaEditar = "SELECT * FROM productos WHERE id = :id";
     $sentenciaEditar = $conexion->prepare($consultaEditar);
-    $sentenciaEditar->bindParam(':id', $idEditar, PDO::PARAM_INT);
+    $sentenciaEditar->bindValue(':id', $idEditar, PDO::PARAM_INT);
     $sentenciaEditar->execute();
     $productoEditar = $sentenciaEditar->fetch(PDO::FETCH_ASSOC);
 }
@@ -345,12 +371,10 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="assets/css/theme-oscuro.css">
 
-
     <script>
         (function() {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'light') {
-                // Aplica la clase al <html>
                 document.documentElement.classList.add('theme-light');
             }
         })();
@@ -388,34 +412,18 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
 
             <?php if ($esAdministrador): ?>
             
+            <div class="row mb-3">
+                <div class="col-12 d-flex"> <button class="btn btn-success me-2" type="button" data-bs-toggle="collapse" data-bs-target="#formularioProducto" aria-expanded="<?php echo isset($productoEditar) ? 'true' : 'false'; ?>" aria-controls="formularioProducto">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        <?php echo isset($productoEditar) ? 'Editando Producto' : 'Agregar Nuevo Producto'; ?>
+                    </button>
 
-
-
-<div class="row mb-3">
-    <div class="col-12 d-flex"> <button class="btn btn-success me-2" type="button" data-bs-toggle="collapse" data-bs-target="#formularioProducto" aria-expanded="<?php echo isset($productoEditar) ? 'true' : 'false'; ?>" aria-controls="formularioProducto">
-            <i class="bi bi-plus-circle me-2"></i>
-            <?php echo isset($productoEditar) ? 'Editando Producto' : 'Agregar Nuevo Producto'; ?>
-        </button>
-
-        <button class="btn btn-info text-white" type="button" data-bs-toggle="collapse" data-bs-target="#formularioCategoria" aria-expanded="false" aria-controls="formularioCategoria">
-            <i class="bi bi-tags-fill me-2"></i>Nueva Categoría
-        </button>
-
-    </div>
-</div>
-
-
-
-
-
-
-
-
-
-
-                
-
+                    <button class="btn btn-info text-white" type="button" data-bs-toggle="collapse" data-bs-target="#formularioCategoria" aria-expanded="false" aria-controls="formularioCategoria">
+                        <i class="bi bi-tags-fill me-2"></i>Nueva Categoría
+                    </button>
+                </div>
             </div>
+
             <div class="row mb-4 collapse <?php echo isset($productoEditar) ? 'show' : ''; ?>" id="formularioProducto">
             <div class="col-md-12">
                     <div class="inventario-card">
@@ -521,43 +529,33 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             </div>
             <?php endif; ?>
 
-<div class="collapse mb-4" id="formularioCategoria">
-    <div class="card card-body border-info shadow-sm">
-        <h5 class="text-info"><i class="bi bi-tags"></i> Registrar Categoría</h5>
-        <form method="POST"> 
-            <div class="row align-items-end">
-                <div class="col-md-5">
-                    <label for="nombre_cat" class="form-label">Nombre de Categoría</label>
-                    <input type="text" class="form-control" id="nombre_cat" name="nombre_categoria" required placeholder="Ej: Relojes">
-                </div>
-                
-                <div class="col-md-4">
-                    <label for="garantia_cat" class="form-label">Días de Garantía</label>
-                    <div class="input-group">
-                        <input type="number" class="form-control" id="garantia_cat" name="dias_garantia" min="0" value="0">
-                        <span class="input-group-text">días</span>
-                    </div>
-                </div>
+            <div class="collapse mb-4" id="formularioCategoria">
+                <div class="card card-body border-info shadow-sm">
+                    <h5 class="text-info"><i class="bi bi-tags"></i> Registrar Categoría</h5>
+                    <form method="POST"> 
+                        <div class="row align-items-end">
+                            <div class="col-md-5">
+                                <label for="nombre_cat" class="form-label">Nombre de Categoría</label>
+                                <input type="text" class="form-control" id="nombre_cat" name="nombre_categoria" required placeholder="Ej: Relojes">
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <label for="garantia_cat" class="form-label">Días de Garantía</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="garantia_cat" name="dias_garantia" min="0" value="0">
+                                    <span class="input-group-text">días</span>
+                                </div>
+                            </div>
 
-                <div class="col-md-3">
-                    <button type="submit" name="guardar_categoria" class="btn btn-primary w-100">
-                        <i class="bi bi-save"></i> Guardar
-                    </button>
+                            <div class="col-md-3">
+                                <button type="submit" name="guardar_categoria" class="btn btn-primary w-100">
+                                    <i class="bi bi-save"></i> Guardar
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
-        </form>
-    </div>
-</div>
-
-
-
-
-
-
-
-
-
-            
 
             <div class="row">
                 <div class="col-md-12">
@@ -567,7 +565,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                             <div class="w-50">
                                 <input type="text" id="buscadorProductos" class="form-control" placeholder="Buscar por nombre, categoría o proveedor...">
                             </div>
-                            </div>
+                        </div>
                         <div class="card-body">
                             <?php if (count($productos) > 0): ?>
                                 <div class="table-responsive">
@@ -643,7 +641,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                                                             <a href="inventario.php?toggle=1&id=<?php echo (int)$producto['id']; ?>" class="btn btn-sm btn-warning btn-action" title="<?php echo ((int)$producto['oculto'] === 1) ? 'Mostrar' : 'Ocultar'; ?>">
                                                                 <i class="bi bi-eye<?php echo ((int)$producto['oculto'] === 1) ? '' : '-slash'; ?>"></i>
                                                             </a>
-                                                            </td>
+                                                        </td>
                                                     <?php endif; ?>
                                                 </tr>
                                             <?php endforeach; ?>
@@ -695,6 +693,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             </div>
         </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -702,7 +701,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             const porcentajeInput = document.getElementById('porcentaje_ganancia');
             const precioInput = document.getElementById('precio');
 
-            // --- Cálculo de Precio (Sin cambios) ---
+            // --- Cálculo de Precio ---
             function calcularPrecio() {
                 if (costoInput && porcentajeInput && precioInput) {
                     const costo = parseFloat(costoInput.value) || 0;
@@ -715,8 +714,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             if (porcentajeInput) porcentajeInput.addEventListener('input', calcularPrecio);
             calcularPrecio();
 
-
-            // --- NUEVO SCRIPT: Buscador de Productos ---
+            // --- Buscador de Productos ---
             const buscador = document.getElementById('buscadorProductos');
             const tabla = document.getElementById('tablaProductos');
             const filas = tabla ? tabla.getElementsByTagName('tbody')[0].getElementsByTagName('tr') : [];
@@ -724,13 +722,11 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
             if (buscador) {
                 buscador.addEventListener('keyup', function() {
                     const textoBusqueda = buscador.value.toLowerCase();
-                    
                     for (let i = 0; i < filas.length; i++) {
                         const fila = filas[i];
                         const celdas = fila.getElementsByTagName('td');
                         // Busca en Nombre (0), Categoría (1) y Proveedor (2)
                         const textoFila = (celdas[0].textContent + ' ' + celdas[1].textContent + ' ' + celdas[2].textContent).toLowerCase();
-                        
                         if (textoFila.indexOf(textoBusqueda) > -1) {
                             fila.style.display = '';
                         } else {
@@ -740,19 +736,15 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                 });
             }
 
-            // --- NUEVO SCRIPT: Lógica del Modal de Ajuste de Stock ---
+            // --- Lógica del Modal de Ajuste de Stock ---
             const modalAjusteStock = document.getElementById('modalAjusteStock');
             if (modalAjusteStock) {
                 modalAjusteStock.addEventListener('show.bs.modal', function (event) {
-                    // Botón que disparó el modal
                     const button = event.relatedTarget;
-                    
-                    // Extraer datos de los atributos data-bs-*
                     const tipo = button.getAttribute('data-bs-tipo');
                     const productoId = button.getAttribute('data-bs-producto-id');
                     const productoNombre = button.getAttribute('data-bs-producto-nombre');
 
-                    // Obtener elementos del modal
                     const modalTitle = modalAjusteStock.querySelector('.modal-title');
                     const modalSubmitBtn = modalAjusteStock.querySelector('#modal_btn_submit');
                     const modalIdInput = modalAjusteStock.querySelector('#modal_id_producto');
@@ -760,7 +752,6 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                     const modalNombreInput = modalAjusteStock.querySelector('#modal_nombre_producto');
                     const modalMotivoInput = modalAjusteStock.querySelector('#modal_motivo');
 
-                    // Configurar el modal según sea ENTRADA o SALIDA
                     if (tipo === 'ENTRADA') {
                         modalTitle.textContent = 'Registrar Ingreso de Stock';
                         modalSubmitBtn.textContent = 'Registrar Ingreso';
@@ -775,16 +766,13 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                         modalMotivoInput.placeholder = 'Ej: Rotura, merma, devolución a proveedor...';
                     }
 
-                    // Rellenar los campos del formulario
                     modalIdInput.value = productoId;
                     modalTipoInput.value = tipo;
                     modalNombreInput.value = productoNombre;
                 });
             }
-
         });
     </script>
-
     <script src="assets/js/boton-oscuro.js"></script>
 </body>
 </html>

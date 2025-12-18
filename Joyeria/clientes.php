@@ -257,7 +257,7 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
                             Servicios del Cliente:
                             <?php echo htmlspecialchars($serviciosCliente[0]['cliente_apellido'] . ', ' . $serviciosCliente[0]['cliente_nombre']); ?>
                         </h5>
-                        <span class="badge bg-primary">Total: <?php echo count($serviciosCliente); ?></span>
+                        <span class="badge bg-dark">Total: <?php echo count($serviciosCliente); ?></span>
                     </div>
                     <div class="card-body">
                         <?php foreach ($serviciosCliente as $serv): ?>
@@ -369,7 +369,7 @@ if (isset($_GET['ver_servicios']) && !empty($_GET['dni_servicios'])) {
                     <div class="clientes-card-header">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0">Lista de Clientes</h5>
-                            <span class="badge bg-primary">Total: <?php echo count($clientes); ?></span>
+                            <span class="badge bg-dark">Total: <?php echo count($clientes); ?></span>
                         </div>
                         <div class="mb-2">
                             <input type="text" id="buscadorClientes" class="form-control" placeholder="Buscar cliente por nombre, apellido o DNI...">

@@ -302,7 +302,7 @@ if ($esAdministrador) {
                     <div class="reportes-card">
                         <div class="reportes-card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">Detalle de Operaciones</h5>
-                            <span class="badge bg-primary">Total: <?php echo count($ventas); ?></span>
+                            <span class="badge bg-dark">Total: <?php echo count($ventas); ?></span>
                         </div>
                         <div class="card-body">
                             <?php if (count($ventas) > 0): ?>

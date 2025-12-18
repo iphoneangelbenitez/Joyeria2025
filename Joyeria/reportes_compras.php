@@ -7,29 +7,31 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Verificar permisos de usuario
-$esAdministrador = ($_SESSION['user_type'] == 'ADM');
+$esAdministrador = (isset($_SESSION['tipo_usuario']) && $_SESSION['tipo_usuario'] == 'ADM') || (isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'ADM');
 
 require_once "config/database.php";
 $database = new Database();
 $db = $database->getConnection();
 
 // Obtener parámetros de filtro
-$fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01'); // Primer día del mes actual
-$fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t'); // Último día del mes actual
+$fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01'); 
+$fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t'); 
 $id_proveedor = $_GET['id_proveedor'] ?? '';
 $forma_pago = $_GET['forma_pago'] ?? '';
 $id_usuario = $_GET['id_usuario'] ?? '';
 
-// Construir consulta base para compras
+// --- MODIFICACIÓN DE CONSULTA: AGREGAR PRODUCTOS ---
 $query_compras = "SELECT c.*, 
-                         p.nombre as proveedor_nombre, p.apellido as proveedor_apellido, p.empresa,
-                         u.nombre as usuario_nombre,
-                         COUNT(cd.id) as items,
-                         SUM(cd.cantidad) as total_unidades
+                          p.nombre as proveedor_nombre, p.apellido as proveedor_apellido, p.empresa,
+                          u.nombre as usuario_nombre,
+                          COUNT(cd.id) as items,
+                          COALESCE(SUM(cd.cantidad), 0) as total_unidades,
+                          GROUP_CONCAT(prod.nombre SEPARATOR ', ') as lista_productos
                   FROM compras c
-                  INNER JOIN proveedores p ON c.id_proveedor = p.id
-                  INNER JOIN usuarios u ON c.id_usuario = u.id
-                  INNER JOIN compra_detalles cd ON c.id = cd.id_compra
+                  LEFT JOIN proveedores p ON c.id_proveedor = p.id
+                  LEFT JOIN usuarios u ON c.id_usuario = u.id
+                  LEFT JOIN compra_detalles cd ON c.id = cd.id_compra
+                  LEFT JOIN productos prod ON cd.id_producto = prod.id
                   WHERE c.fecha_compra BETWEEN :fecha_inicio AND :fecha_fin";
 
 $params = [
@@ -65,13 +67,13 @@ $compras = $stmt_compras->fetchAll(PDO::FETCH_ASSOC);
 
 // Consulta para estadísticas de compras
 $query_estadisticas = "SELECT 
-    COUNT(*) as total_compras,
+    COUNT(DISTINCT c.id) as total_compras,
     SUM(c.total) as monto_total_compras,
     AVG(c.total) as promedio_compra,
     SUM(cd.cantidad) as total_unidades_compradas,
     COUNT(DISTINCT c.id_proveedor) as proveedores_diferentes
 FROM compras c
-INNER JOIN compra_detalles cd ON c.id = cd.id_compra
+LEFT JOIN compra_detalles cd ON c.id = cd.id_compra
 WHERE c.fecha_compra BETWEEN :fecha_inicio AND :fecha_fin";
 
 $params_estadisticas = [
@@ -133,7 +135,7 @@ $query_compras_proveedor = "SELECT
     COUNT(*) as cantidad_compras,
     SUM(c.total) as monto_total
 FROM compras c
-INNER JOIN proveedores p ON c.id_proveedor = p.id
+LEFT JOIN proveedores p ON c.id_proveedor = p.id
 WHERE c.fecha_compra BETWEEN :fecha_inicio AND :fecha_fin
 GROUP BY p.id, p.empresa
 ORDER BY monto_total DESC
@@ -196,7 +198,6 @@ if ($esAdministrador) {
                 </div>
             </div>
 
-            <!-- Filtros -->
             <div class="row mb-4">
                 <div class="col-md-12">
                     <div class="filtros-container">
@@ -256,7 +257,6 @@ if ($esAdministrador) {
                 </div>
             </div>
 
-            <!-- Estadísticas generales -->
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="estadistica-card">
@@ -288,7 +288,6 @@ if ($esAdministrador) {
                 </div>
             </div>
 
-            <!-- Gráficos -->
             <div class="row mb-4">
                 <div class="col-md-6">
                     <div class="reportes-card">
@@ -331,13 +330,12 @@ if ($esAdministrador) {
                 </div>
             </div>
 
-            <!-- Tabla de compras -->
             <div class="row">
                 <div class="col-md-12">
                     <div class="reportes-card">
                         <div class="reportes-card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">Detalle de Compras</h5>
-                            <span class="badge bg-primary">Total: <?php echo count($compras); ?></span>
+                            <span class="badge bg-dark">Total: <?php echo count($compras); ?></span>
                         </div>
                         <div class="card-body">
                             <?php if (count($compras) > 0): ?>
@@ -349,7 +347,7 @@ if ($esAdministrador) {
                                                 <th>Fecha Compra</th>
                                                 <th>Proveedor</th>
                                                 <th>Usuario</th>
-                                                <th>Forma Pago</th>
+                                                <th>Productos</th> 
                                                 <th>Items</th>
                                                 <th>Unidades</th>
                                                 <th>Total</th>
@@ -361,13 +359,18 @@ if ($esAdministrador) {
                                                 <tr>
                                                     <td>#<?php echo $compra['id']; ?></td>
                                                     <td><?php echo date('d/m/Y', strtotime($compra['fecha_compra'])); ?></td>
-                                                    <td><?php echo htmlspecialchars($compra['empresa']); ?></td>
-                                                    <td><?php echo htmlspecialchars($compra['usuario_nombre']); ?></td>
+                                                    <td><?php echo htmlspecialchars($compra['empresa'] ?? $compra['proveedor_nombre'] ?? 'N/A'); ?></td>
+                                                    <td><?php echo htmlspecialchars($compra['usuario_nombre'] ?? 'N/A'); ?></td>
+                                                    
                                                     <td>
-                                                        <span class="badge badge-compra badge-<?php echo strtolower($compra['forma_pago']); ?>">
-                                                            <?php echo $compra['forma_pago']; ?>
-                                                        </span>
+                                                        <small class="text-muted">
+                                                            <?php 
+                                                            $prods = $compra['lista_productos'] ?? 'Sin detalle';
+                                                            echo (strlen($prods) > 50) ? substr($prods, 0, 50) . '...' : $prods;
+                                                            ?>
+                                                        </small>
                                                     </td>
+
                                                     <td><?php echo $compra['items']; ?></td>
                                                     <td><?php echo $compra['total_unidades']; ?></td>
                                                     <td><strong>$<?php echo number_format($compra['total'], 2); ?></strong></td>
@@ -401,7 +404,6 @@ if ($esAdministrador) {
         </div>
     </div>
 
-    <!-- Modal para detalles de compra -->
     <div class="modal fade" id="modalDetalleCompra" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -548,200 +550,157 @@ if ($esAdministrador) {
 
         // Inicializar gráficos cuando el documento esté listo
         document.addEventListener('DOMContentLoaded', function() {
-            // Gráfico de compras por día
             const ctxComprasPorDia = document.getElementById('chartComprasPorDia').getContext('2d');
             new Chart(ctxComprasPorDia, comprasPorDiaConfig);
 
-            // Gráfico de formas de pago
             const ctxFormasPago = document.getElementById('chartFormasPago').getContext('2d');
             new Chart(ctxFormasPago, formasPagoConfig);
 
-            // Gráfico de compras por proveedor
             const ctxComprasProveedor = document.getElementById('chartComprasProveedor').getContext('2d');
             new Chart(ctxComprasProveedor, comprasProveedorConfig);
         });
 
-function verDetalleCompra(idCompra) {
-    fetch(`obtener_detalle_compra.php?id_compra=${idCompra}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('modalCompraId').textContent = idCompra;
-                
-                let html = `
-                    <div class="row mb-4">
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Información de la Compra</h6>
-                                </div>
-                                <div class="card-body">
-                                    <table class="table table-sm table-borderless">
-                                        <tr>
-                                            <td><strong>Proveedor:</strong></td>
-                                            <td>${data.compra.proveedor_nombre}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Contacto:</strong></td>
-                                            <td>${data.compra.proveedor_contacto}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Teléfono:</strong></td>
-                                            <td>${data.compra.proveedor_telefono || 'N/A'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Email:</strong></td>
-                                            <td>${data.compra.proveedor_email || 'N/A'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Fecha Compra:</strong></td>
-                                            <td>${new Date(data.compra.fecha_compra).toLocaleDateString()}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Fecha Registro:</strong></td>
-                                            <td>${new Date(data.compra.fecha_registro).toLocaleString()}</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Información de Pago</h6>
-                                </div>
-                                <div class="card-body">
-                                    <table class="table table-sm table-borderless">
-                                        <tr>
-                                            <td><strong>Forma de Pago:</strong></td>
-                                            <td><span class="badge bg-primary">${data.compra.forma_pago}</span></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Total:</strong></td>
-                                            <td><strong>$${parseFloat(data.compra.total).toFixed(2)}</strong></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Registrado por:</strong></td>
-                                            <td>${data.compra.usuario_nombre}</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-                if (data.compra.observaciones) {
-                    html += `
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h6 class="mb-0">Observaciones</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <p class="mb-0">${data.compra.observaciones}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-
-                // Detalles de productos
-                html += `
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <h6 class="mb-0">Productos Comprados</h6>
-                                    <span class="badge bg-primary">${data.detalles.length} productos</span>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm table-hover">
-                                            <thead>
+        function verDetalleCompra(idCompra) {
+            fetch(`obtener_detalle_compra.php?id_compra=${idCompra}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('modalCompraId').textContent = idCompra;
+                        
+                        let html = `
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Información de la Compra</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <table class="table table-sm table-borderless">
                                                 <tr>
-                                                    <th>Producto</th>
-                                                    <th>Categoría</th>
-                                                    <th>Cantidad</th>
-                                                    <th>Costo Unitario</th>
-                                                    <th>Subtotal</th>
+                                                    <td><strong>Proveedor:</strong></td>
+                                                    <td>${data.compra.proveedor_nombre}</td>
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                `;
-
-                data.detalles.forEach(detalle => {
-                    html += `
-                        <tr>
-                            <td>
-                                <strong>${detalle.producto_nombre}</strong>
-                                ${detalle.producto_descripcion ? '<br><small class="text-muted">' + detalle.producto_descripcion + '</small>' : ''}
-                            </td>
-                            <td>${detalle.categoria_nombre}</td>
-                            <td>${detalle.cantidad}</td>
-                            <td>$${parseFloat(detalle.costo_unitario).toFixed(2)}</td>
-                            <td><strong>$${parseFloat(detalle.subtotal).toFixed(2)}</strong></td>
-                        </tr>
-                    `;
-                });
-
-                html += `</tbody></table></div></div></div></div></div>`;
-
-                // Movimientos de stock relacionados
-                if (data.movimientos.length > 0) {
-                    html += `
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                        <h6 class="mb-0">Movimientos de Stock Relacionados</h6>
-                                        <span class="badge bg-info">${data.movimientos.length} movimientos</span>
+                                                <tr>
+                                                    <td><strong>Contacto:</strong></td>
+                                                    <td>${data.compra.proveedor_contacto}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Teléfono:</strong></td>
+                                                    <td>${data.compra.proveedor_telefono || 'N/A'}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Email:</strong></td>
+                                                    <td>${data.compra.proveedor_email || 'N/A'}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Fecha Compra:</strong></td>
+                                                    <td>${new Date(data.compra.fecha_compra).toLocaleDateString()}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Fecha Registro:</strong></td>
+                                                    <td>${new Date(data.compra.fecha_registro).toLocaleString()}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
                                     </div>
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-hover">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Producto</th>
-                                                        <th>Tipo</th>
-                                                        <th>Cantidad</th>
-                                                        <th>Stock Anterior</th>
-                                                        <th>Stock Nuevo</th>
-                                                        <th>Fecha</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                    `;
-
-                    data.movimientos.forEach(movimiento => {
-                        html += `
-                            <tr>
-                                <td>${movimiento.producto_nombre}</td>
-                                <td><span class="badge bg-success">${movimiento.tipo}</span></td>
-                                <td>${movimiento.cantidad}</td>
-                                <td>${movimiento.cantidad_anterior}</td>
-                                <td>${movimiento.cantidad_nueva}</td>
-                                <td>${new Date(movimiento.fecha).toLocaleString()}</td>
-                            </tr>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Información de Pago</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <table class="table table-sm table-borderless">
+                                                <tr>
+                                                    <td><strong>Forma de Pago:</strong></td>
+                                                    <td><span class="badge bg-dark">${data.compra.forma_pago}</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Total:</strong></td>
+                                                    <td><strong>$${parseFloat(data.compra.total).toFixed(2)}</strong></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Registrado por:</strong></td>
+                                                    <td>${data.compra.usuario_nombre}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         `;
-                    });
 
-                    html += `</tbody></table></div></div></div></div></div>`;
-                }
+                        if (data.compra.observaciones) {
+                            html += `
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Observaciones</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="mb-0">${data.compra.observaciones}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
 
-                document.getElementById('detalleCompraContent').innerHTML = html;
-                new bootstrap.Modal(document.getElementById('modalDetalleCompra')).show();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error al cargar los detalles de la compra');
-        });
-}
+                        // Detalles de productos
+                        html += `
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-header d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">Productos Comprados</h6>
+                                            <span class="badge bg-dark">${data.detalles.length} productos</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Producto</th>
+                                                            <th>Categoría</th>
+                                                            <th>Cantidad</th>
+                                                            <th>Costo Unitario</th>
+                                                            <th>Subtotal</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                        `;
+
+                        data.detalles.forEach(detalle => {
+                            html += `
+                                <tr>
+                                    <td>
+                                        <strong>${detalle.producto_nombre}</strong>
+                                        ${detalle.producto_descripcion ? '<br><small class="text-muted">' + detalle.producto_descripcion + '</small>' : ''}
+                                    </td>
+                                    <td>${detalle.categoria_nombre}</td>
+                                    <td>${detalle.cantidad}</td>
+                                    <td>$${parseFloat(detalle.costo_unitario).toFixed(2)}</td>
+                                    <td><strong>$${parseFloat(detalle.subtotal).toFixed(2)}</strong></td>
+                                </tr>
+                            `;
+                        });
+
+                        html += `</tbody></table></div></div></div></div></div>`;
+                        
+                        // (Opcional) Movimientos de stock omitidos en esta vista si no es crítico
+
+                        document.getElementById('detalleCompraContent').innerHTML = html;
+                        new bootstrap.Modal(document.getElementById('modalDetalleCompra')).show();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al cargar los detalles de la compra');
+                });
+        }
 
         // Función para exportar a PDF
         function exportarPDF() {

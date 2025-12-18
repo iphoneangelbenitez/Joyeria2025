@@ -6,7 +6,6 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-
 if (!isset($_SESSION['id_usuario']) && isset($_SESSION['user_id'])) {
     $_SESSION['id_usuario'] = $_SESSION['user_id'];
 }
@@ -22,8 +21,14 @@ $conexion = $baseDeDatos->getConnection();
 
 $mensaje = '';
 $error = '';
+$ventaExitosaID = 0; // Variable para controlar el modal
 
-/* Inicializar carrito si no existe (antes de procesar POST para evitar warnings) */
+// Capturar ID de venta exitosa si viene por GET (Patrón Post-Redirect-Get)
+if (isset($_GET['venta_ok'])) {
+    $ventaExitosaID = (int)$_GET['venta_ok'];
+}
+
+/* Inicializar carrito si no existe */
 if (!isset($_SESSION['carrito_venta']) || !is_array($_SESSION['carrito_venta'])) {
     $_SESSION['carrito_venta'] = [];
 }
@@ -46,9 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($producto) {
             $stockTotal = (int)$producto['stock'];
 
-            // ---- INICIO DE MODIFICACIÓN (Lógica de Stock) ----
-            
-            // 1. Verificar cuánto hay ya en el carrito
             $cantidadEnCarrito = 0;
             foreach ($_SESSION['carrito_venta'] as $item) {
                 if ((int)$item['id'] === $idProducto) {
@@ -57,23 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // 2. Calcular el total deseado
             $cantidadTotalDeseada = $cantidadEnCarrito + $cantidad;
 
-            // 3. Verificación de stock corregida
             if ($cantidad > 0 && $cantidadTotalDeseada <= $stockTotal) {
-            // ---- FIN DE MODIFICACIÓN ----
-            
-                // Verificar si el producto ya está en el carrito
                 $encontrado = false;
                 foreach ($_SESSION['carrito_venta'] as &$item) {
                     if ((int)$item['id'] === $idProducto) {
-                        $item['cantidad'] += $cantidad; // Suma la nueva cantidad
+                        $item['cantidad'] += $cantidad;
                         $encontrado = true;
                         break;
                     }
                 }
-                unset($item); // romper referencia
+                unset($item);
 
                 if (!$encontrado) {
                     $_SESSION['carrito_venta'][] = [
@@ -81,23 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'nombre' => $producto['nombre'],
                         'precio' => (float)$producto['precio'],
                         'cantidad' => $cantidad,
-                        'stock' => $stockTotal, // Guardamos el stock total
+                        'stock' => $stockTotal,
                     ];
                 }
-
                 $mensaje = "Producto agregado al carrito.";
-            
-            // ---- INICIO DE MODIFICACIÓN (Lógica de Stock) ----
             } elseif ($cantidad <= 0) {
                  $error = "La cantidad debe ser mayor a cero.";
             } else {
-                // 4. Error específico
                 $stockRestante = $stockTotal - $cantidadEnCarrito;
-                if ($stockRestante < 0) $stockRestante = 0; // Por si acaso
-                
+                if ($stockRestante < 0) $stockRestante = 0;
                 $error = "No hay suficiente stock. Stock total: $stockTotal. Ya tiene $cantidadEnCarrito en el carrito. Solo puede agregar $stockRestante más.";
             }
-            // ---- FIN DE MODIFICACIÓN ----
         } else {
             $error = "Producto no encontrado.";
         }
@@ -181,8 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sentenciaDetalle->bindParam(':precio_unitario', $precioUnitario);
                     $sentenciaDetalle->execute();
 
-                    // Actualizar stock (CON VERIFICACIÓN ATÓMICA)
-                    // Se agrega "AND stock >= :cantidad" para asegurar que solo se reste si hay stock.
+                    // Actualizar stock
                     $consultaActualizarStock = "UPDATE productos SET stock = stock - :cantidad 
                                                 WHERE id = :id_producto AND stock >= :cantidad";
                     $sentenciaActualizar = $conexion->prepare($consultaActualizarStock);
@@ -190,15 +180,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sentenciaActualizar->bindParam(':id_producto', $idProducto, PDO::PARAM_INT);
                     $sentenciaActualizar->execute();
 
-                    // Verificar si la actualización fue exitosa
-                    // Si rowCount() es 0, significa que la condición (stock >= :cantidad) no se cumplió.
                     if ($sentenciaActualizar->rowCount() === 0) {
-                        // Lanzamos una excepción para forzar el rollback de toda la transacción
                         throw new Exception("Stock insuficiente para el producto '{$productoCarrito['nombre']}'. Venta cancelada.");
                     }
 
                     // Registrar movimiento de stock
-
                     $consultaMovimiento = "INSERT INTO movimientos_stock (id_producto, tipo, cantidad, cantidad_anterior, cantidad_nueva, motivo, id_usuario) 
                                            SELECT :id_producto, 'SALIDA', :cantidad, (stock + :cantidad), stock, 'VENTA', :id_usuario 
                                            FROM productos WHERE id = :id_producto";
@@ -214,11 +200,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Limpiar carrito
                 $_SESSION['carrito_venta'] = [];
 
-                // Redirigir a generación de PDF
-                header("Location: generar_pdf.php?id_venta=" . $idVenta);
+                // Redirigir a la misma página con parámetro de éxito (Evita reenvío de formulario al F5)
+                header("Location: ventas.php?venta_ok=" . $idVenta);
                 exit();
 
-            } catch (Throwable $e) { // captura Exception y PDOException
+            } catch (Throwable $e) {
                 if ($conexion->inTransaction()) {
                     $conexion->rollBack();
                 }
@@ -229,8 +215,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ---- Datos para selects ---- */
-
-// Productos
 $consultaProductos = "SELECT p.id, p.nombre, p.precio, p.stock, c.nombre AS categoria 
                       FROM productos p 
                       INNER JOIN categorias c ON p.id_categoria = c.id 
@@ -240,7 +224,6 @@ $sentenciaProductos = $conexion->prepare($consultaProductos);
 $sentenciaProductos->execute();
 $productos = $sentenciaProductos->fetchAll(PDO::FETCH_ASSOC);
 
-// Clientes
 $consultaClientes = "SELECT id, nombre, apellido, dni FROM clientes ORDER BY apellido, nombre";
 $sentenciaClientes = $conexion->prepare($consultaClientes);
 $sentenciaClientes->execute();
@@ -248,10 +231,10 @@ $clientes = $sentenciaClientes->fetchAll(PDO::FETCH_ASSOC);
 
 /* ---- Totales del carrito ---- */
 $subtotalCarrito = 0.0;
-$totalItemsCarrito = 0; // <-- CAMBIO: Inicializar contador de ítems
+$totalItemsCarrito = 0; 
 foreach ($_SESSION['carrito_venta'] as $productoCarrito) {
     $subtotalCarrito += ((float)$productoCarrito['precio']) * ((int)$productoCarrito['cantidad']);
-    $totalItemsCarrito += (int)$productoCarrito['cantidad']; // <-- CAMBIO: Sumar cantidad de ítems
+    $totalItemsCarrito += (int)$productoCarrito['cantidad']; 
 }
 $descuentoAplicado = isset($_POST['descuento']) ? (float)$_POST['descuento'] : 0.0;
 $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100);
@@ -267,9 +250,29 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-    
     <link rel="stylesheet" href="assets/css/theme-oscuro.css">
 
+    <style>
+        /* Estilos específicos para el Modal de Éxito */
+        .modal-success-icon {
+            font-size: 5rem;
+            color: #198754; /* Verde Bootstrap */
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .modal-success-title {
+            text-align: center;
+            font-weight: bold;
+            color: #333;
+        }
+        .theme-dark .modal-success-title {
+            color: #fff;
+        }
+        .modal-body-centered {
+            text-align: center;
+            font-size: 1.1rem;
+        }
+    </style>
 
     <script>
     (function() {
@@ -279,9 +282,7 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
         }
     })();
     </script>
-
-   
-    </head>
+</head>
 <body>
     <?php include 'includes/navbar.php'; ?>
 
@@ -300,10 +301,6 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                 <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
             <?php endif; ?>
 
-            <?php if ($mensaje): ?>
-                <div class="alert alert-success"><?php echo htmlspecialchars($mensaje); ?></div>
-            <?php endif; ?>
-
             <div class="row">
                 <div class="col-md-8">
                     <div class="ventas-card" style="overflow: visible;">
@@ -315,7 +312,7 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label for="id_producto" class="form-label">Seleccionar Producto (Buscar por ID o Nombre)</label>
+                                            <label for="id_producto" class="form-label">Seleccionar Producto</label>
                                             <select id="id_producto" name="id_producto" required>
                                                 <option value="">Seleccionar producto</option>
                                                 <?php foreach ($productos as $producto): ?>
@@ -345,7 +342,7 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                     <div class="ventas-card">
                         <div class="ventas-card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">Productos en el Carrito</h5>
-                            <span class="badge bg-primary">
+                            <span class="badge bg-dark">
                                 <?php echo count($_SESSION['carrito_venta']); ?> Tipos / <?php echo $totalItemsCarrito; ?> Ítems
                             </span>
                         </div>
@@ -355,9 +352,9 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                                     <div class="producto-item">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div>
-            <h6 class="mb-1"><?php echo htmlspecialchars($productoCarrito['nombre']); ?></h6>
-            <p class="mb-1">Precio unitario: $<?php echo number_format((float)$productoCarrito['precio'], 2); ?></p>
-            <p class="mb-1">Stock disponible: <?php echo (int)$productoCarrito['stock']; ?></p>
+                                                <h6 class="mb-1"><?php echo htmlspecialchars($productoCarrito['nombre']); ?></h6>
+                                                <p class="mb-1">Precio unitario: $<?php echo number_format((float)$productoCarrito['precio'], 2); ?></p>
+                                                <p class="mb-1">Stock disponible: <?php echo (int)$productoCarrito['stock']; ?></p>
                                             </div>
                                             <div class="text-end">
                                                 <form method="post" action="" class="d-inline">
@@ -394,8 +391,8 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                             <form method="post" action="">
                                 <div class="mb-3">
                                     <label for="id_cliente" class="form-label">Cliente (Buscar por DNI o Nombre)</label>
-                                    <select id="id_cliente" name="id_cliente" required>
-                                        <option value="">Seleccionar cliente</option>
+                                    <select id="id_cliente" name="id_cliente" required placeholder="🔍 Escriba nombre o DNI...">
+                                        <option value="">Escriba para buscar cliente...</option>
                                         <?php foreach ($clientes as $cliente): ?>
                                             <option value="<?php echo (int)$cliente['id']; ?>">
                                                 <?php echo htmlspecialchars($cliente['apellido'] . ', ' . $cliente['nombre'] . ' (DNI: ' . $cliente['dni'] . ')'); ?>
@@ -433,15 +430,21 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                                 <div class="resumen-venta">
                                     <div class="resumen-item">
                                         <span>Subtotal:</span>
-                                        <span>$<?php echo number_format($subtotalCarrito, 2); ?></span>
+                                        <span id="display-subtotal" data-subtotal="<?php echo $subtotalCarrito; ?>">
+                                            $<?php echo number_format($subtotalCarrito, 2); ?>
+                                        </span>
                                     </div>
                                     <div class="resumen-item">
                                         <span>Descuento:</span>
-                                        <span><?php echo $descuentoAplicado; ?>% (-$<?php echo number_format($subtotalCarrito * $descuentoAplicado / 100, 2); ?>)</span>
+                                        <span id="display-descuento">
+                                            <?php echo $descuentoAplicado; ?>% (-$<?php echo number_format($subtotalCarrito * $descuentoAplicado / 100, 2); ?>)
+                                        </span>
                                     </div>
                                     <div class="resumen-total">
                                         <span>Total:</span>
-                                        <span>$<?php echo number_format($totalCarrito, 2); ?></span>
+                                        <span id="display-total">
+                                            $<?php echo number_format($totalCarrito, 2); ?>
+                                        </span>
                                     </div>
                                 </div>
 
@@ -454,12 +457,45 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                         </div>
                     </div>
                 </div>
-            </div></div></div><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="successModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <button type="button" class="btn-close" onclick="window.location.href='ventas.php'" aria-label="Close"></button>
+                </div>
+                <div class="modal-body modal-body-centered pt-0 pb-4">
+                    <div class="modal-success-icon">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <h3 class="modal-success-title mb-3">¡Venta Realizada!</h3>
+                    <p class="text-muted">
+                        La venta se ha registrado exitosamente en el sistema.<br>
+                        El comprobante de venta se está descargando/abriendo.
+                    </p>
+                    
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="button" class="btn btn-success btn-lg" onclick="window.location.href='ventas.php'">
+                            Aceptar y Nueva Venta
+                        </button>
+                        
+                        <a href="generar_pdf.php?id_venta=<?php echo $ventaExitosaID; ?>" target="_blank" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-printer"></i> Abrir Ticket Manualmente
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     
     <script>
-        // Seleccionar método de pago (Función original)
+        // Seleccionar método de pago visualmente
         function seleccionarMetodoPago(metodo) {
             document.querySelectorAll('.metodo-pago-option').forEach(option => {
                 option.classList.remove('active');
@@ -473,32 +509,42 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
             }
         }
 
-        // Ejecutar cuando el DOM esté listo
         document.addEventListener("DOMContentLoaded", function() {
             
-            // Inicializar Tom Select para Productos
+            // --- LOGICA DEL MODAL DE ÉXITO ---
+            <?php if ($ventaExitosaID > 0): ?>
+                // 1. Intentar abrir el PDF en pestaña nueva
+                var pdfWindow = window.open('generar_pdf.php?id_venta=<?php echo $ventaExitosaID; ?>', '_blank');
+                
+                // 2. Mostrar el modal
+                var successModal = new bootstrap.Modal(document.getElementById('successModal'));
+                successModal.show();
+                
+                // Aviso en consola por si bloquean el popup
+                if(!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed=='undefined') { 
+                    console.log("Popup bloqueado. El usuario puede usar el botón manual.");
+                }
+            <?php endif; ?>
+
+            // 1. Inicializar Tom Select para Productos
             var elProducto = document.getElementById('id_producto');
             if (elProducto) {
-                new TomSelect(elProducto, {
+                var tomSelectProducto = new TomSelect(elProducto, {
                     create: false,
-                    sortField: {
-                        field: "text",
-                        direction: "asc"
-                    }
+                    sortField: { field: "text", direction: "asc" }
                 });
 
-                // Lógica de stock corregida para TomSelect
-                elProducto.tomselect.on('change', function() {
+                // Lógica de stock para Productos
+                tomSelectProducto.on('change', function() {
                     const selectedValue = this.getValue();
                     const cantidad = document.getElementById('cantidad');
                     
                     if (selectedValue && cantidad) {
                         const optionData = this.options[selectedValue]; 
                         if (optionData && optionData.$option) {
-                            const originalOptionElement = optionData.$option;
-                            const stock = parseInt(originalOptionElement.dataset.stock || '1', 10); 
+                            const stock = parseInt(optionData.$option.dataset.stock || '1', 10); 
                             cantidad.max = stock;
-                            cantidad.value = 1; // Reseteamos a 1
+                            cantidad.value = 1; 
                         } else {
                             cantidad.max = 1;
                             cantidad.value = 1;
@@ -507,40 +553,54 @@ $totalCarrito = $subtotalCarrito - ($subtotalCarrito * $descuentoAplicado / 100)
                 });
             }
             
-            // Inicializar Tom Select para Clientes
+            // 2. Inicializar Tom Select para Clientes
             var elCliente = document.getElementById('id_cliente');
             if (elCliente) {
                  new TomSelect(elCliente, {
-                    create: false,
-                    sortField: {
-                        field: "text",
-                        direction: "asc"
+                    create: false, 
+                    placeholder: "🔍 Buscar por Nombre o DNI...",
+                    allowEmptyOption: true,
+                    maxOptions: 100, 
+                    sortField: { field: "text", direction: "asc" },
+                    plugins: ['clear_button'], 
+                    onDelete: function(values) {
+                        return confirm(values.length > 1 ? '¿Borrar selección?' : null);
                     }
                 });
             }
 
-            // --- INICIO DE MODIFICACIÓN: Actualización automática del carrito ---
+            // 3. Actualización automática del carrito (cantidad)
             document.querySelectorAll('input[name="nueva_cantidad"]').forEach(input => {
                 input.addEventListener('change', function() {
-                    // Busca el botón 'actualizar' dentro de su propio formulario y lo "pulsa"
                     this.form.querySelector('button[name="actualizar_cantidad"]').click();
                 });
             });
-            // --- FIN DE MODIFICACIÓN ---
+
+            // 4. CÁLCULO DE DESCUENTO EN VIVO (Sin recargar página)
+            const inputDescuento = document.getElementById('descuento');
+            const displaySubtotal = document.getElementById('display-subtotal');
+            const displayDescuento = document.getElementById('display-descuento');
+            const displayTotal = document.getElementById('display-total');
+
+            if (inputDescuento && displaySubtotal) {
+                const subtotalBase = parseFloat(displaySubtotal.getAttribute('data-subtotal')) || 0;
+
+                inputDescuento.addEventListener('input', function() {
+                    let porcentaje = parseFloat(this.value);
+                    
+                    if (isNaN(porcentaje)) porcentaje = 0;
+                    if (porcentaje < 0) porcentaje = 0;
+                    if (porcentaje > 100) porcentaje = 100;
+
+                    const montoDescuento = subtotalBase * (porcentaje / 100);
+                    const totalFinal = subtotalBase - montoDescuento;
+
+                    displayDescuento.innerText = `${porcentaje}% (-$${montoDescuento.toFixed(2)})`;
+                    displayTotal.innerText = `$${totalFinal.toFixed(2)}`;
+                });
+            }
         });
-
-
-        // Recalcular al cambiar el descuento (Script original)
-        const inputDescuento = document.getElementById('descuento');
-        if (inputDescuento) {
-            inputDescuento.addEventListener('input', function() {
-                // Pequeña optimización: no enviar todo el formulario, 
-                // pero si se necesita que el descuento se guarde en POST, 
-                // this.form.submit() está bien.
-                this.form.submit();
-            });
-        }
     </script>
-     <script src="assets/js/boton-oscuro.js"></script>
+    <script src="assets/js/boton-oscuro.js"></script>
 </body>
-</html> 
+</html>

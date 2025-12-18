@@ -1,370 +1,202 @@
 <?php
 // generar_pdf.php
-// Un solo archivo con 2 modos:
-// - action=view (default): muestra iframe con PDF + cuenta regresiva para volver
-// - action=pdf: genera y entrega el PDF del ticket
-
 session_start();
+require_once 'vendor/autoload.php';
+require_once "config/database.php";
+
+// 1. Validar sesión
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// -------------------------
-// Parámetros comunes
-// -------------------------
-$idVenta = isset($_GET['id_venta']) ? (int)$_GET['id_venta'] : 0;
-if ($idVenta <= 0) {
-    http_response_code(400);
-    echo "Parámetro 'id_venta' inválido.";
-    exit();
+// 2. Validar ID de venta
+if (!isset($_GET['id_venta']) || empty($_GET['id_venta'])) {
+    die("Error: No se especificó el ID de la venta.");
 }
 
-$action = isset($_GET['action']) ? strtolower($_GET['action']) : 'view';
+$idVenta = (int)$_GET['id_venta'];
+$baseDeDatos = new Database();
+$conexion = $baseDeDatos->getConnection();
 
-// Para la vista con cuenta regresiva:
-$segundos = isset($_GET['t']) ? (int)$_GET['t'] : 7;
-if ($segundos < 3) $segundos = 3;
-if ($segundos > 60) $segundos = 60;
+// 3. Obtener datos de la Venta y Cliente
+// CORRECCIONES SQL: 
+// - Tabla 'usuarios' en lugar de 'users'
+// - Se cambió 'c.direccion' (que no existe) por 'c.email'
+$queryVenta = "SELECT v.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido, c.dni as cliente_dni, 
+                      c.email as cliente_email, c.telefono as cliente_telefono,
+                      u.nombre as vendedor
+               FROM ventas v 
+               JOIN clientes c ON v.id_cliente = c.id 
+               JOIN usuarios u ON v.id_usuario = u.id 
+               WHERE v.id = :id";
 
-$back = isset($_GET['back']) ? $_GET['back'] : 'ventas.php';
-// No permitir URLs absolutas externas
-if (preg_match('#^https?://#i', $back)) {
-    $back = 'ventas.php';
-}
-
-// -------------------------
-// Modo VIEW (HTML + iframe + countdown)
-// -------------------------
-if ($action !== 'pdf') {
-    ?>
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-    <meta charset="utf-8">
-    <title>Ticket de Venta #<?= htmlspecialchars($idVenta) ?></title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        *{box-sizing:border-box}
-        body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#111;color:#eee}
-        header{padding:10px 14px;border-bottom:1px solid #222;display:flex;align-items:center;gap:10px}
-        header .title{font-weight:600}
-        header .spacer{flex:1}
-        header .pill{
-            font-size:14px;background:#1f2937;border:1px solid #374151;border-radius:999px;
-            padding:6px 10px;display:inline-flex;align-items:center;gap:6px
-        }
-        header .btn{
-            appearance:none;border:1px solid #374151;background:#111;color:#eee;border-radius:10px;
-            padding:8px 12px;cursor:pointer;font-weight:600
-        }
-        header .btn:hover{background:#0b0b0b}
-        .wrap{height:calc(100vh - 56px);display:grid;grid-template-rows:1fr}
-        iframe{width:100%;height:100%;border:0;background:#222}
-    </style>
-    </head>
-    <body>
-    <header>
-        <div class="title">Ticket de Venta #<?= htmlspecialchars($idVenta) ?></div>
-        <div class="spacer"></div>
-        <div class="pill">Regresando en <span id="counter"><?= (int)$segundos ?></span>s</div>
-        <button class="btn" onclick="window.location.href='<?= htmlspecialchars($back, ENT_QUOTES) ?>'">Volver ahora</button>
-    </header>
-    <div class="wrap">
-        <iframe
-            src="generar_pdf.php?action=pdf&id_venta=<?= (int)$idVenta ?>#toolbar=0"
-            title="Ticket PDF"></iframe>
-    </div>
-
-    <script>
-    (function(){
-        var s = <?= (int)$segundos ?>;
-        var counter = document.getElementById('counter');
-        var backUrl = '<?= htmlspecialchars($back, ENT_QUOTES) ?>';
-        var timer = setInterval(function(){
-            s--;
-            if (s <= 0) {
-                clearInterval(timer);
-                window.location.href = backUrl;
-            } else {
-                counter.textContent = s;
-            }
-        }, 1000);
-    })();
-    </script>
-    </body>
-    </html>
-    <?php
-    exit();
-}
-
-// -------------------------
-// Modo PDF (genera el ticket)
-// -------------------------
-
-require_once __DIR__ . "/config/database.php";
-require_once __DIR__ . '/vendor/autoload.php'; // mPDF + mpdf/qrcode
-
-// DB
-$database = new Database();
-$db = $database->getConnection();
-
-// Utilidad
-function money_ar($n) { return '$ ' . number_format((float)$n, 2, ',', '.'); }
-
-// Cabecera venta (esquema real)
-$sqlVenta = "
-    SELECT 
-        v.id,
-        v.id_cliente,
-        v.id_usuario,
-        v.fecha,
-        v.descuento,
-        v.subtotal,
-        v.total,
-        v.metodo_pago
-    FROM ventas v
-    WHERE v.id = :id
-    LIMIT 1
-";
-$stmt = $db->prepare($sqlVenta);
-$stmt->bindValue(':id', $idVenta, PDO::PARAM_INT);
+$stmt = $conexion->prepare($queryVenta);
+$stmt->bindParam(':id', $idVenta);
 $stmt->execute();
 $venta = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$venta) {
-    http_response_code(404);
-    echo "La venta #{$idVenta} no existe.";
-    exit();
+    die("Error: Venta no encontrada.");
 }
 
-// Cliente
-$cliente = [
-    'nombre'   => 'Consumidor',
-    'apellido' => 'Final',
-    'dni'      => '',
-    'telefono' => '',
-    'email'    => ''
-];
+// 4. Obtener detalles de la venta (Productos)
+$queryDetalles = "SELECT vd.*, p.nombre as producto_nombre 
+                  FROM venta_detalles vd 
+                  JOIN productos p ON vd.id_producto = p.id 
+                  WHERE vd.id_venta = :id";
+$stmtDetalles = $conexion->prepare($queryDetalles);
+$stmtDetalles->bindParam(':id', $idVenta);
+$stmtDetalles->execute();
+$detalles = $stmtDetalles->fetchAll(PDO::FETCH_ASSOC);
 
-$sqlCliente = "SELECT nombre, apellido, dni, telefono, email FROM clientes WHERE id = :id LIMIT 1";
-$sc = $db->prepare($sqlCliente);
-$sc->bindValue(':id', (int)$venta['id_cliente'], PDO::PARAM_INT);
-$sc->execute();
-if ($c = $sc->fetch(PDO::FETCH_ASSOC)) $cliente = array_merge($cliente, $c);
+// 5. Obtener configuración del negocio (Opcional, datos quemados por defecto)
+// Si decides crear una tabla 'configuracion' en el futuro, esto funcionará.
+$negocioNombre = 'Joyería Sosa';
+$negocioDireccion = 'San Lorenzo 1869'; // Puedes editar esto manualmente
+$negocioTelefono = '376442-5674';
+$negocioEmail = 'joyeriasosa@gmail.com';
 
-// Vendedor
-$usuario = [
-    'nombre' => isset($_SESSION['user_name']) ? $_SESSION['user_name'] : (isset($_SESSION['username']) ? $_SESSION['username'] : 'Vendedor')
-];
-$sqlUser = "SELECT nombre, username FROM usuarios WHERE id = :id LIMIT 1";
-$su = $db->prepare($sqlUser);
-$su->bindValue(':id', (int)$venta['id_usuario'], PDO::PARAM_INT);
-$su->execute();
-if ($u = $su->fetch(PDO::FETCH_ASSOC)) {
-    $usuario['nombre'] = !empty($u['nombre']) ? $u['nombre'] : (!empty($u['username']) ? $u['username'] : $usuario['nombre']);
-}
+// --- INICIO GENERACIÓN PDF ---
 
-// Ítems
-$sqlItems = "
-    SELECT 
-        d.id_producto,
-        d.cantidad,
-        d.precio_unitario,
-        (d.cantidad * d.precio_unitario) AS subtotal,
-        p.nombre AS producto_nombre
-    FROM venta_detalles d
-    LEFT JOIN productos p ON p.id = d.id_producto
-    WHERE d.id_venta = :id
-    ORDER BY d.id ASC
-";
-$si = $db->prepare($sqlItems);
-$si->bindValue(':id', $idVenta, PDO::PARAM_INT);
-$si->execute();
-$items = $si->fetchAll(PDO::FETCH_ASSOC);
+// Crear instancia de mPDF
+$mpdf = new \Mpdf\Mpdf([
+    'mode' => 'utf-8', 
+    'format' => 'A4', 
+    'margin_left' => 15,
+    'margin_right' => 15,
+    'margin_top' => 15,
+    'margin_bottom' => 15
+]);
 
-// Cálculos
-$subtotal = (float)$venta['subtotal'];
-$descuento = (float)$venta['descuento'];
-$total = (float)$venta['total'];
-$fechaVenta = !empty($venta['fecha']) ? date('d/m/Y H:i', strtotime($venta['fecha'])) : date('d/m/Y H:i');
-
-// Datos comercio
-$tienda = [
-    'nombre'    => 'JOYERÍA SOSA',
-    'cuit'      => 'CUIT: 20-12345678-9',
-    'direccion' => 'San Lorenzo 1869 - Posadas',
-    'telefono'  => '351-555-1234',
-    'pie'       => 'Gracias por su compra',
-];
-$logoPath = __DIR__ . '/assets/img/logo.png';
-$logoExists = is_file($logoPath);
-
-// Estilos
+// Estilos CSS para el ticket
 $css = '
-*{ box-sizing:border-box; }
-body{ font-family: DejaVu Sans, Arial, sans-serif; font-size:10pt; margin:0; }
-.ticket{ width:100%; padding:6px 6px 10px; }
-.header{ text-align:center; }
-.header .brand{ font-size:12pt; font-weight:bold; margin-top:4px; }
-.header .meta{ font-size:9pt; line-height:1.2; }
-hr{ border:none; border-top:1px dashed #000; margin:6px 0; }
-.table{ width:100%; border-collapse:collapse; }
-.th, .td{ font-size:9pt; padding:2px 0; }
-.right{ text-align:right; }
-.center{ text-align:center; }
-.small{ font-size:8pt; }
-.mono{ font-family: DejaVu Sans Mono, monospace; }
-.item-row{ vertical-align:top; }
-.totales .td{ font-size:10pt; }
-.bold{ font-weight:bold; }
-.qr{ margin-top:6px; text-align:center; }
-footer{ text-align:center; margin-top:8px; font-size:9pt; }
+<style>
+    body { font-family: sans-serif; font-size: 10pt; color: #333; }
+    .header-table { width: 100%; border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 20px; }
+    .logo { width: 120px; }
+    .empresa-info { text-align: right; }
+    .empresa-nombre { font-size: 16pt; font-weight: bold; color: #000; }
+    .titulo-doc { font-size: 14pt; font-weight: bold; text-align: center; margin-top: 10px; background-color: #f4f4f4; padding: 5px; border: 1px solid #ddd; }
+    
+    .info-cliente-table { width: 100%; margin-bottom: 20px; }
+    .label { font-weight: bold; width: 100px; }
+    
+    .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .items-table th { background-color: #333; color: #fff; padding: 8px; text-align: left; font-size: 9pt; }
+    .items-table td { border-bottom: 1px solid #ddd; padding: 8px; font-size: 9pt; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    
+    .totales-table { width: 40%; margin-left: auto; border: 1px solid #ddd; }
+    .totales-table td { padding: 5px; }
+    .total-final { background-color: #f4f4f4; font-weight: bold; font-size: 11pt; }
+    
+    .footer { text-align: center; margin-top: 50px; font-size: 8pt; color: #777; border-top: 1px solid #ddd; padding-top: 10px; }
+</style>
 ';
 
-// Código QR
-$ticketCode = 'TKT-' . str_pad((string)$venta['id'], 6, '0', STR_PAD_LEFT);
+// Contenido HTML
+$html = '
+<table class="header-table">
+    <tr>
+        <td width="50%">
+            <div class="empresa-nombre">' . htmlspecialchars($negocioNombre) . '</div>
+            ' . htmlspecialchars($negocioDireccion) . '<br>
+            Tel: ' . htmlspecialchars($negocioTelefono) . '<br>
+            Email: ' . htmlspecialchars($negocioEmail) . '
+        </td>
+        <td width="50%" class="empresa-info">
+            <b>Fecha:</b> ' . date("d/m/Y H:i", strtotime($venta['fecha'])) . '<br>
+            <b>Nro. Venta:</b> #' . str_pad($venta['id'], 6, "0", STR_PAD_LEFT) . '<br>
+            <b>Vendedor:</b> ' . htmlspecialchars($venta['vendedor']) . '
+        </td>
+    </tr>
+</table>
 
-// HTML del ticket
-ob_start();
-?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Ticket #<?= htmlspecialchars($venta['id']); ?></title>
-    <style><?= $css; ?></style>
-</head>
-<body>
-<div class="ticket">
-    <div class="header">
-        <?php if ($logoExists): ?>
-            <img src="<?= htmlspecialchars($logoPath); ?>" style="max-width:120px; max-height:60px;" />
-        <?php endif; ?>
-        <div class="brand"><?= htmlspecialchars($tienda['nombre']); ?></div>
-        <div class="meta">
-            <?= htmlspecialchars($tienda['cuit']); ?><br>
-            <?= htmlspecialchars($tienda['direccion']); ?><br>
-            Tel: <?= htmlspecialchars($tienda['telefono']); ?>
-        </div>
-    </div>
+<div class="titulo-doc">COMPROBANTE DE VENTA</div>
 
-    <hr>
+<table class="info-cliente-table">
+    <tr>
+        <td class="label">Cliente:</td>
+        <td>' . htmlspecialchars($venta['cliente_apellido'] . ', ' . $venta['cliente_nombre']) . '</td>
+        <td class="label">DNI:</td>
+        <td>' . htmlspecialchars($venta['cliente_dni']) . '</td>
+    </tr>
+    <tr>
+        <td class="label">Email:</td>
+        <td>' . htmlspecialchars($venta['cliente_email'] ?? 'No registrado') . '</td>
+        <td class="label">Teléfono:</td>
+        <td>' . htmlspecialchars($venta['cliente_telefono'] ?? 'No registrado') . '</td>
+    </tr>
+    <tr>
+        <td class="label">Pago:</td>
+        <td>' . htmlspecialchars($venta['metodo_pago']) . '</td>
+        <td></td>
+        <td></td>
+    </tr>
+</table>
 
-    <table class="table">
+<table class="items-table">
+    <thead>
         <tr>
-            <td class="td small">Ticket:</td>
-            <td class="td small right mono">#<?= htmlspecialchars($venta['id']); ?></td>
+            <th width="10%">Cant.</th>
+            <th width="50%">Descripción del Producto</th>
+            <th width="20%" class="text-right">Precio Unit.</th>
+            <th width="20%" class="text-right">Subtotal</th>
         </tr>
+    </thead>
+    <tbody>';
+
+foreach ($detalles as $item) {
+    $precioUnit = (float)$item['precio_unitario'];
+    $cantidad = (int)$item['cantidad'];
+    $subtotalItem = $precioUnit * $cantidad;
+    
+    $html .= '
         <tr>
-            <td class="td small">Fecha:</td>
-            <td class="td small right mono"><?= htmlspecialchars($fechaVenta); ?></td>
-        </tr>
-        <tr>
-            <td class="td small">Vendedor:</td>
-            <td class="td small right"><?= htmlspecialchars($usuario['nombre']); ?></td>
-        </tr>
-        <?php
-        $nombreCliente = trim(($cliente['apellido'] ?? '').' '.($cliente['nombre'] ?? ''));
-        $nombreCliente = trim($nombreCliente) !== '' ? $nombreCliente : 'Consumidor Final';
-        ?>
-        <tr>
-            <td class="td small">Cliente:</td>
-            <td class="td small right"><?= htmlspecialchars($nombreCliente); ?></td>
-        </tr>
-        <?php if (!empty($cliente['dni'])): ?>
-        <tr>
-            <td class="td small">DNI:</td>
-            <td class="td small right mono"><?= htmlspecialchars($cliente['dni']); ?></td>
-        </tr>
-        <?php endif; ?>
-        <tr>
-            <td class="td small">Pago:</td>
-            <td class="td small right"><?= htmlspecialchars($venta['metodo_pago']); ?></td>
-        </tr>
-    </table>
-
-    <hr>
-
-    <table class="table">
-        <tr class="th mono">
-            <td class="td">Descripción</td>
-            <td class="td right">Cant</td>
-            <td class="td right">P.Unit</td>
-            <td class="td right">Subt</td>
-        </tr>
-        <?php if ($items): ?>
-            <?php foreach ($items as $it): ?>
-            <tr class="item-row">
-                <td class="td mono"><?= htmlspecialchars($it['producto_nombre'] ?: 'Producto #'.$it['id_producto']); ?></td>
-                <td class="td right mono"><?= (int)$it['cantidad']; ?></td>
-                <td class="td right mono"><?= money_ar($it['precio_unitario']); ?></td>
-                <td class="td right mono"><?= money_ar($it['subtotal']); ?></td>
-            </tr>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <tr><td class="td small" colspan="4">Sin ítems</td></tr>
-        <?php endif; ?>
-    </table>
-
-    <hr>
-
-    <table class="table totales">
-        <tr>
-            <td class="td right mono" colspan="3">Subtotal</td>
-            <td class="td right mono"><?= money_ar($subtotal); ?></td>
-        </tr>
-        <?php if ($descuento > 0): ?>
-        <tr>
-            <td class="td right mono" colspan="3">Descuento</td>
-            <td class="td right mono">- <?= money_ar($descuento); ?></td>
-        </tr>
-        <?php endif; ?>
-        <tr class="bold">
-            <td class="td right mono" colspan="3">TOTAL</td>
-            <td class="td right mono"><?= money_ar($total); ?></td>
-        </tr>
-    </table>
-
-    <div class="qr">
-        <barcode code="<?= htmlspecialchars($ticketCode); ?>" type="QR" size="1.1" error="M" />
-        <div class="small mono"><?= htmlspecialchars($ticketCode); ?></div>
-    </div>
-
-    <hr>
-
-    <footer>
-        <?= htmlspecialchars($tienda['pie']); ?><br>
-        <span class="small">No válido como factura</span>
-    </footer>
-</div>
-</body>
-</html>
-<?php
-$html = ob_get_clean();
-
-try {
-    $mpdf = new \Mpdf\Mpdf([
-        'mode' => 'utf-8',
-        'format' => [80, 200],  // Cambia a [58, 200] si tu impresora es 58mm
-        'margin_left' => 2,
-        'margin_right' => 2,
-        'margin_top' => 2,
-        'margin_bottom' => 2,
-        'margin_header' => 0,
-        'margin_footer' => 0,
-        'default_font_size' => 10,
-        'default_font' => 'dejavusans',
-        'autoScriptToLang' => true,
-        'autoLangToFont' => true,
-        'shrink_tables_to_fit' => 1
-    ]);
-    $mpdf->showImageErrors = true;
-    $mpdf->WriteHTML($html);
-    $nombreArchivo = "ticket_venta_{$venta['id']}.pdf";
-    $mpdf->Output($nombreArchivo, \Mpdf\Output\Destination::INLINE);
-} catch (\Throwable $e) {
-    http_response_code(500);
-    echo "Error generando PDF: " . htmlspecialchars($e->getMessage());
-    exit();
+            <td class="text-center">' . $cantidad . '</td>
+            <td>' . htmlspecialchars($item['producto_nombre']) . '</td>
+            <td class="text-right">$' . number_format($precioUnit, 2) . '</td>
+            <td class="text-right">$' . number_format($subtotalItem, 2) . '</td>
+        </tr>';
 }
+
+$html .= '
+    </tbody>
+</table>
+
+<table class="totales-table">
+    <tr>
+        <td class="text-right">Subtotal:</td>
+        <td class="text-right">$' . number_format($venta['subtotal'], 2) . '</td>
+    </tr>';
+
+if ($venta['descuento'] > 0) {
+    $montoDescuento = $venta['subtotal'] - $venta['total'];
+    $html .= '
+    <tr>
+        <td class="text-right">Descuento (' . floatval($venta['descuento']) . '%):</td>
+        <td class="text-right">- $' . number_format($montoDescuento, 2) . '</td>
+    </tr>';
+}
+
+$html .= '
+    <tr class="total-final">
+        <td class="text-right">TOTAL A PAGAR:</td>
+        <td class="text-right">$' . number_format($venta['total'], 2) . '</td>
+    </tr>
+</table>
+
+<div class="footer">
+    Gracias por su compra.<br>
+    Documento no válido como factura fiscal si no se adjunta ticket oficial.
+</div>
+';
+
+// Escribir PDF
+$mpdf->WriteHTML($css . $html);
+
+// Salida directa al navegador
+$mpdf->Output('Ticket_Venta_#' . $idVenta . '.pdf', 'I');
+?>

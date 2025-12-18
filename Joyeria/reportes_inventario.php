@@ -333,7 +333,7 @@ $data_stock_categoria = json_encode(array_column($stock_por_categoria, 'total_st
                             <div class="reportes-card mt-0">
                                 <div class="reportes-card-header d-flex justify-content-between align-items-center">
                                     <h5 class="mb-0">Movimientos de Stock</h5>
-                                    <span class="badge bg-primary">Total: <?php echo count($movimientos); ?></span>
+                                    <span class="badge bg-dark">Total: <?php echo count($movimientos); ?></span>
                                 </div>
                                 <div class="card-body">
                                     <?php if (count($movimientos) > 0): ?>

@@ -9,7 +9,7 @@ if (!isset($_SESSION['tipo_usuario']) && isset($_SESSION['user_type'])) {
     $_SESSION['tipo_usuario'] = $_SESSION['user_type'];
 }
 
-// Verificación de sesión (usa las nuevas claves; cae a las viejas si existen)
+// Verificación de sesión
 if (!isset($_SESSION['id_usuario']) && !isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
@@ -77,12 +77,10 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="assets/css/theme-oscuro.css">
 
-    // boton claro oscuro
     <script>
         (function() {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'light') {
-                // Aplica la clase al <html>
                 document.documentElement.classList.add('theme-light');
             }
         })();
@@ -93,10 +91,16 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
         #theme-toggle-btn .icon-sun { display: inline-block; }
         html.theme-light #theme-toggle-btn .icon-moon { display: inline-block; }
         html.theme-light #theme-toggle-btn .icon-sun { display: none; }
+        
+        /* Estilos simples para los badges si no están en el CSS global */
+        .badge-estado { padding: 5px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
+        .badge-secondary { background-color: #6c757d; color: white; }
+        .badge-primary { background-color: #0d6efd; color: white; }
+        .badge-warning { background-color: #ffc107; color: black; }
+        .badge-info { background-color: #0dcaf0; color: black; }
+        .badge-success { background-color: #198754; color: white; }
+        .badge-danger { background-color: #dc3545; color: white; }
     </style>
-    
-
-
 </head>
 <body>
     <?php include 'includes/navbar.php'; ?>
@@ -111,7 +115,6 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
 
-        <!-- Tarjetas de estadísticas -->
         <div class="row">
             <div class="col-md-4 mb-4">
                 <div class="stat-card stat-card-primary">
@@ -141,7 +144,6 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
 
-        <!-- Acciones rápidas -->
         <div class="row">
             <div class="col-md-12">
                 <div class="quick-actions">
@@ -166,7 +168,6 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
                             </a>
                         </div>
                         <?php 
-                        // Mostrar "Nuevo Cliente" sólo a administradores (ADM). Compatibilidad con claves en inglés.
                         $esAdmin = false;
                         if (isset($_SESSION['tipo_usuario']) && $_SESSION['tipo_usuario'] === 'ADM') $esAdmin = true;
                         if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'ADM') $esAdmin = true;
@@ -184,7 +185,6 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
 
-        <!-- Actividad reciente -->
         <div class="row mt-4">
             <div class="col-md-6">
                 <div class="recent-card">
@@ -203,7 +203,6 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
                                         <div class="text-end">
                                             <div>
                                                 <?php 
-                                                // Verificar si es un array antes de imprimir (defensivo)
                                                 if (is_array($venta['cliente_nombre'])) {
                                                     echo htmlspecialchars(implode(' ', $venta['cliente_nombre']));
                                                 } else {
@@ -241,7 +240,7 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
                                             <small class="text-muted"><?php echo date('d/m/Y', strtotime($servicio['fecha_ingreso'])); ?></small>
                                         </div>
                                         <div class="text-end">
-                                            <div>
+                                            <div class="mb-1">
                                                 <?php 
                                                 if (is_array($servicio['cliente_nombre'])) {
                                                     echo htmlspecialchars(implode(' ', $servicio['cliente_nombre']));
@@ -250,19 +249,24 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
                                                 }
                                                 ?>
                                             </div>
+                                            
                                             <?php 
-                                            // Mapeo de estado a clase y texto legible
-                                            $estado = $servicio['estado'];
-                                            $claseEstado = 'pendiente';
-                                            $textoEstado = 'Pendiente';
+                                            // --- CORRECCIÓN: Switch ampliado para todos los estados ---
+                                            $estado = strtoupper($servicio['estado']);
+                                            $claseBadge = 'secondary';
+                                            
                                             switch ($estado) {
-                                                case 'PENDIENTE':  $claseEstado = 'pendiente';  $textoEstado = 'Pendiente';  break;
-                                                case 'EN_PROCESO': $claseEstado = 'proceso';    $textoEstado = 'En Proceso'; break;
-                                                case 'COMPLETADO': $claseEstado = 'completado'; $textoEstado = 'Completado'; break;
+                                                case 'PENDIENTE':   $claseBadge = 'secondary'; break;
+                                                case 'EN_PROCESO':  $claseBadge = 'primary'; break;
+                                                case 'TERMINADO':   $claseBadge = 'warning text-dark'; break;
+                                                case 'PAGADO':      $claseBadge = 'info text-dark'; break;
+                                                case 'ENTREGADO':   $claseBadge = 'success'; break;
+                                                case 'CANCELADO':   $claseBadge = 'danger'; break;
+                                                default:            $claseBadge = 'secondary'; break;
                                             }
                                             ?>
-                                            <span class="badge-estado badge-<?php echo $claseEstado; ?>">
-                                                <?php echo $textoEstado; ?>
+                                            <span class="badge bg-<?php echo $claseBadge; ?>">
+                                                <?php echo htmlspecialchars($estado); ?>
                                             </span>
                                         </div>
                                     </div>
@@ -281,9 +285,6 @@ $serviciosRecientes = $sentenciaServiciosRecientes->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
     <script src="assets/js/boton-oscuro.js"></script>
-
-
 </body>
 </html>

@@ -285,7 +285,7 @@ if ($esAdministrador && isset($_GET['editar']) && is_numeric($_GET['editar'])) {
                     <div class="proveedores-card-header">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0">Lista de Proveedores</h5>
-                            <span class="badge bg-primary">Total: <?php echo count($proveedores); ?></span>
+                            <span class="badge bg-dark">Total: <?php echo count($proveedores); ?></span>
                         </div>
                         
                         <div class="mb-0">
